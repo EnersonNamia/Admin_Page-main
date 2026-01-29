@@ -49,8 +49,8 @@ async def get_users(
             created_at,
             is_active,
             last_login,
-            (SELECT COUNT(*) FROM user_test_attempts uta JOIN tests t ON uta.test_id = t.test_id WHERE uta.user_id = users.user_id AND t.test_type = 'adaptive') as tests_taken,
-            (SELECT MAX(attempt_date) FROM user_test_attempts uta JOIN tests t ON uta.test_id = t.test_id WHERE uta.user_id = users.user_id AND t.test_type = 'adaptive') as last_test_date
+            (SELECT COUNT(*) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as tests_taken,
+            (SELECT MAX(attempt_date) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as last_test_date
         FROM users WHERE 1=1"""
         
         count_query = "SELECT COUNT(*) as total FROM users WHERE 1=1"
@@ -312,7 +312,7 @@ async def get_user_test_history(user_id: int):
                 uta.time_taken
             FROM user_test_attempts uta
             JOIN tests t ON uta.test_id = t.test_id
-            WHERE uta.user_id = $1 AND t.test_type = 'adaptive'
+            WHERE uta.user_id = $1
             ORDER BY uta.attempt_date DESC
         """, [user_id])
         

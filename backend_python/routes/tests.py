@@ -14,6 +14,11 @@ class TestAttempt(BaseModel):
     total_questions: int
     time_taken: Optional[int] = None  # in minutes
 
+class TestCreate(BaseModel):
+    test_name: str
+    description: Optional[str] = None
+    test_type: Optional[str] = "adaptive"  # adaptive, assessment, etc.
+
 class QuestionCreate(BaseModel):
     test_id: int
     question_text: str
@@ -69,6 +74,24 @@ async def get_tests(
         }
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch tests: {str(error)}")
+
+# Create a new test
+@router.post("/", status_code=201)
+async def create_test(test: TestCreate):
+    try:
+        result = execute_query_one(
+            """INSERT INTO tests (test_name, description, test_type) 
+               VALUES ($1, $2, $3) RETURNING test_id""",
+            [test.test_name, test.description or "", test.test_type or "adaptive"]
+        )
+        
+        return {
+            "message": "Test created successfully",
+            "test_id": result['test_id'],
+            "test_name": test.test_name
+        }
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to create test: {str(error)}")
 
 # Get test by ID with questions and options
 @router.get("/{test_id}")
@@ -168,40 +191,23 @@ async def submit_test_attempt(test_id: int, attempt: TestAttempt):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Insert test attempt
+        # Insert test attempt into user_test_attempts
         result = execute_query_one(
             """INSERT INTO user_test_attempts (user_id, test_id, score, total_questions, time_taken) 
                VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
             [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
         )
         
-        return {
-            "message": "Test attempt recorded successfully",
-            "attempt_id": result['attempt_id']
-        }
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to record test attempt: {str(error)}")
-@router.post("/{test_id}/submit", status_code=201)
-async def submit_test_attempt(test_id: int, attempt: TestAttempt):
-    try:
-        # Verify test exists
-        test = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
-        if not test:
-            raise HTTPException(status_code=404, detail="Test not found")
-        
-        # Verify user exists
-        user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [attempt.user_id])
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Insert test attempt
-        result = execute_query_one(
-            """INSERT INTO user_test_attempts (user_id, test_id, score, total_questions, time_taken) 
-               VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
-            [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
-        )
+        # Also insert into test_attempts table for tracking total system attempts
+        try:
+            execute_query_one(
+                """INSERT INTO test_attempts (user_id, test_id, score, total_questions, time_taken) 
+                   VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
+                [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
+            )
+        except Exception as e:
+            # Log but don't fail if test_attempts insert fails
+            print(f"Warning: Failed to insert into test_attempts: {str(e)}")
         
         return {
             "message": "Test attempt recorded successfully",
