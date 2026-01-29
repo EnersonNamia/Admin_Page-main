@@ -19,12 +19,12 @@ class QuestionCreate(BaseModel):
     question_text: str
     question_order: int
     question_type: Optional[str] = "multiple_choice"  # multiple_choice, true_false, short_answer
+    category: Optional[str] = None
 
 class OptionCreate(BaseModel):
-    question_id: int
+    question_id: Optional[int] = None
     option_text: str
-    is_correct: bool
-    option_order: int
+    trait: Optional[str] = None
 
 # Get all tests with pagination and search
 @router.get("/")
@@ -212,6 +212,16 @@ async def submit_test_attempt(test_id: int, attempt: TestAttempt):
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to record test attempt: {str(error)}")
 
+# Get all available traits
+@router.get("/traits")
+async def get_traits():
+    try:
+        traits = execute_query("SELECT DISTINCT trait_tag FROM options WHERE trait_tag IS NOT NULL ORDER BY trait_tag")
+        trait_list = [trait['trait_tag'] for trait in traits if trait.get('trait_tag')]
+        return {"traits": trait_list}
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch traits: {str(error)}")
+
 # ==================== QUESTION MANAGEMENT ====================
 
 # Get all questions with pagination and search
@@ -312,9 +322,9 @@ async def create_question(question: QuestionCreate):
             raise HTTPException(status_code=404, detail="Test not found")
         
         result = execute_query_one(
-            """INSERT INTO questions (test_id, question_text, question_order, question_type)
-               VALUES ($1, $2, $3, $4) RETURNING question_id""",
-            [question.test_id, question.question_text, question.question_order, question.question_type]
+            """INSERT INTO questions (test_id, question_text, question_order, question_type, category)
+               VALUES ($1, $2, $3, $4, $5) RETURNING question_id""",
+            [question.test_id, question.question_text, question.question_order, question.question_type, question.category]
         )
         
         return {
@@ -355,9 +365,9 @@ async def create_option(question_id: int, option: OptionCreate):
             raise HTTPException(status_code=404, detail="Question not found")
         
         result = execute_query_one(
-            """INSERT INTO options (question_id, option_text, is_correct, option_order)
+            """INSERT INTO options (question_id, option_text, trait_tag, weight)
                VALUES ($1, $2, $3, $4) RETURNING option_id""",
-            [question_id, option.option_text, option.is_correct, option.option_order]
+            [question_id, option.option_text, option.trait or None, 1]
         )
         
         return {

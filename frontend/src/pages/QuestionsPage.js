@@ -22,13 +22,77 @@ function QuestionsPage() {
   const [formData, setFormData] = useState({
     test_id: '',
     question_text: '',
-    question_order: 1,
-    question_type: 'multiple_choice',
+    category: ''
   });
+  
+  const questionCategoryGroups = {
+    'Career Discovery': ['Dream Career', 'Work Environment', 'Daily Work', 'Skill Mastery', 'Career Achievement'],
+    'Field-Specific Specialization': ['Healthcare Career', 'Healthcare Scenario', 'Technology Career', 'Technology Project', 'Engineering Career', 'Engineering Project', 'Business Career', 'Business Activity', 'Public Service Career', 'Public Service Scenario', 'Education Career', 'Teaching Subject', 'Arts Career', 'Creative Project', 'Maritime Career', 'Agriculture Career', 'Hospitality Career'],
+    'Situational & Scenario-Based': ['Situational - Emergency', 'Situational - Teamwork', 'Situational - Accident', 'Situational - Community', 'Situational - Leadership', 'Situational - Disaster Response', 'Situational - School Event', 'Situational - Ethics', 'Situational - Family Business', 'Situational - Mental Health', 'Situational - Technology Crisis', 'Situational - Survival', 'Situational - Business', 'Situational - Environmental', 'Situational - Event Planning', 'Situational - Cyberbullying', 'Situational - Family Health', 'Situational - Technology', 'Situational - Media', 'Situational - Academic Integrity', 'Situational - Financial Decision'],
+    'Scale/Rating Questions': ['Scale - Math', 'Scale - Stress', 'Scale - Communication', 'Scale - Physical', 'Scale - Creativity'],
+    'Academic Questions': ['Academic - Favorite', 'Academic - Challenge', 'Academic - Study Style'],
+    'Skills & Competencies': ['Language Skill', 'Tech Skill', 'Leadership Skill', 'Stress Management', 'Math Skill', 'Science Skill'],
+    'Professional & Career Planning': ['Professional Licensure', 'Board Exam Preference', 'Work Location', 'Dream Employer', 'PH Industry', 'Career Priority', 'Salary Importance'],
+    'Work & Lifestyle Preferences': ['Lifestyle', 'Career Values', 'Work Lifestyle', 'International Work', 'Work Schedule'],
+    'Personality & Interests': ['Personality', 'Interest Type', 'Hobbies', 'Entertainment Preference', 'Role Model', 'Fun - Role', 'Fun - Superpower'],
+    'School & Learning': ['School Involvement', 'Project Preference', 'Favorite Subject', 'Challenging Subject'],
+    'Specialized Career Tracks': ['Nursing Specialization', 'Programming Specialization', 'Accounting Specialization', 'Criminology Specialization', 'Education Specialization'],
+    'Personal Vision & Goals': ['Future Vision', 'Life Legacy', 'Career Fear', 'Decision Making'],
+    'Soft Skills & Interpersonal': ['Problem Solving', 'Learning Style', 'Conflict Resolution', 'Team Role', 'Emotional Intelligence'],
+    'Community & Social': ['Community Scenario', 'Event Planning'],
+    'Miscellaneous': ['Survival Scenario', 'Disaster Response']
+  };
+  
+  const [dynamicCategories, setDynamicCategories] = useState({});
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryParent, setNewCategoryParent] = useState('Career Discovery');
+  const [showCategorySelector, setShowCategorySelector] = useState(false);
+  const [options, setOptions] = useState([
+    { text: '', trait: '' },
+    { text: '', trait: '' },
+    { text: '', trait: '' },
+    { text: '', trait: '' }
+  ]);
+  const [availableTraits, setAvailableTraits] = useState([]);
+  const [showAddOptions, setShowAddOptions] = useState(false);
+  const [showTraitSelector, setShowTraitSelector] = useState(false);
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState(null);
+  const [showNewTraitInput, setShowNewTraitInput] = useState(false);
+  const [newTraitText, setNewTraitText] = useState('');
+  const [newTraitCategory, setNewTraitCategory] = useState('Skill Traits');
+  const [dynamicTraits, setDynamicTraits] = useState({});
+
+  const traitCategories = {
+    // Specialized Path Traits (Career-Specific)
+    'RIASEC Types': ['Realistic', 'Investigative', 'Artistic', 'Social', 'Enterprising', 'Conventional'],
+    'Healthcare Path': ['Patient-Care', 'Medical-Lab', 'Rehab-Therapy', 'Health-Admin'],
+    'Technology Path': ['Software-Dev', 'Hardware-Systems', 'Data-Analytics', 'Cyber-Defense'],
+    'Engineering Path': ['Civil-Build', 'Electrical-Power', 'Mechanical-Design', 'Industrial-Ops'],
+    'Business Path': ['Finance-Acct', 'Marketing-Sales', 'Startup-Venture'],
+    'Education Path': ['Teaching-Ed'],
+    'Arts Path': ['Visual-Design', 'Digital-Media', 'Spatial-Design'],
+    'Science Path': ['Lab-Research', 'Field-Research'],
+    'Public Service Path': ['Law-Enforce', 'Community-Serve'],
+    'Other Paths': ['Maritime-Sea', 'Agri-Nature', 'Hospitality-Svc'],
+    'Skill Traits': ['Technical-Skill', 'People-Skill', 'Creative-Skill', 'Analytical-Skill', 'Physical-Skill', 'Admin-Skill'],
+    // General Trait Categories
+    'Helping Others': ['Helping-others', 'Empathetic', 'Patient-focused', 'Service-oriented', 'Compassionate', 'Collaborative', 'Mentoring', 'Nurturing', 'Encouraging', 'Supportive'],
+    'Problem Solving': ['Problem-solving', 'Analytical', 'Logical', 'Critical-thinking', 'Investigative', 'Research-oriented', 'Methodical', 'Detail-focused', 'Strategic', 'Systematic'],
+    'Creative': ['Creative-expression', 'Artistic-passion', 'Innovative', 'Visual-learner', 'Aesthetic-sense', 'Digital-art', 'Expressive', 'Imaginative', 'Design-thinking', 'Experimental'],
+    'Leadership': ['Leading-teams', 'Leadership', 'Ambitious', 'Strategic', 'Big-picture', 'Confident', 'Decisive', 'Motivational', 'Organized', 'Collaborative'],
+    'Technical': ['Tech-savvy', 'Hands-on', 'Technical', 'Laboratory', 'Precision-oriented', 'Algorithm-focused', 'Mechanical-minded', 'Circuit-design', 'Practical', 'Detail-focused'],
+    'Healthcare': ['Patient-focused', 'Clinical-setting', 'Empathetic', 'Helping-others', 'Health-conscious', 'Compassionate', 'Resilient', 'Crisis-management', 'Service-oriented'],
+    'Business': ['Business-minded', 'Analytical', 'Strategic', 'Ambitious', 'Risk-taking', 'Quantitative', 'Leadership', 'Organized', 'Persuasive', 'Negotiation-skills'],
+    'Social': ['Extroverted', 'Collaborative', 'Social', 'Empathetic', 'Team-centric', 'Articulate', 'Persuasive', 'Cultural-awareness', 'Mentoring', 'Community-focused'],
+    'Research': ['Research-oriented', 'Analytical', 'Theoretical', 'Investigative', 'Independent', 'Detail-focused', 'Methodical', 'Scientific-thinking', 'Observational', 'Contemplative'],
+    'Outdoor': ['Field-work', 'Outdoor-enthusiast', 'Active', 'Adventurous', 'Nature-focused', 'Physical-fitness', 'Exploratory', 'Hands-on', 'Practical']
+  };
 
   useEffect(() => {
     fetchQuestions();
     fetchTests();
+    fetchAvailableTraits();
   }, [page, pageSize]);
 
   useEffect(() => {
@@ -63,6 +127,15 @@ function QuestionsPage() {
     }
   };
 
+  const fetchAvailableTraits = async () => {
+    try {
+      // Traits are now organized in categories above
+      setAvailableTraits(true);
+    } catch (err) {
+      console.error('Failed to load traits');
+    }
+  };
+
   const filterQuestions = () => {
     let filtered = questions;
     if (search) {
@@ -76,13 +149,71 @@ function QuestionsPage() {
 
   const handleAddQuestion = async (e) => {
     e.preventDefault();
+    
     try {
-      await axios.post(`${API_BASE_URL}/tests/questions`, formData);
-      setFormData({ test_id: '', question_text: '', question_order: 1, question_type: 'multiple_choice' });
+      setError('');
+      
+      // Validate that at least one option has text
+      const filledOptions = options.filter(o => o.text.trim());
+      if (filledOptions.length === 0) {
+        setError('Please add at least one option');
+        return;
+      }
+
+      // Find Smart Assessment (Adaptive) test ID
+      const smartAssessmentTest = tests.find(t => t.test_name === 'Smart Assessment (Adaptive)');
+      if (!smartAssessmentTest) {
+        setError('Smart Assessment (Adaptive) test not found');
+        return;
+      }
+
+      // First create the question
+      const questionResponse = await axios.post(`${API_BASE_URL}/tests/questions`, {
+        test_id: smartAssessmentTest.test_id,
+        question_text: formData.question_text,
+        question_order: 1,
+        question_type: 'standard',
+        category: formData.category || null
+      });
+
+      const questionId = questionResponse.data.question_id;
+      if (!questionId) {
+        throw new Error('No question ID returned from server');
+      }
+
+      // Then add all options
+      let optionCount = 0;
+      for (let i = 0; i < options.length; i++) {
+        const option = options[i];
+        if (option.text.trim()) {
+          await axios.post(`${API_BASE_URL}/tests/questions/${questionId}/options`, {
+            option_text: option.text.trim(),
+            trait: option.trait || null
+          });
+          optionCount++;
+        }
+      }
+
+      if (optionCount === 0) {
+        setError('Failed to add options');
+        return;
+      }
+
+      // Reset form on success
+      setFormData({ test_id: '', question_text: '', category: '' });
+      setOptions([
+        { text: '', trait: '' },
+        { text: '', trait: '' },
+        { text: '', trait: '' },
+        { text: '', trait: '' }
+      ]);
       setShowModal(false);
+      setError('');
       fetchQuestions();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add question');
+      const errorMsg = err.response?.data?.detail || err.response?.data?.message || err.message || 'Failed to add question';
+      setError(errorMsg);
+      console.error('Error adding question:', err);
     }
   };
 
@@ -97,9 +228,113 @@ function QuestionsPage() {
     }
   };
 
+  const addOption = () => {
+    setOptions([...options, { text: '', trait: '' }]);
+  };
+
+  const removeOption = (index) => {
+    setOptions(options.filter((_, i) => i !== index));
+  };
+
+  const updateOption = (index, field, value) => {
+    const newOptions = [...options];
+    newOptions[index][field] = value;
+    setOptions(newOptions);
+  };
+
+  const openTraitSelector = (index) => {
+    setSelectedOptionIndex(index);
+    setShowTraitSelector(true);
+  };
+
+  const selectTrait = (trait) => {
+    if (selectedOptionIndex !== null) {
+      updateOption(selectedOptionIndex, 'trait', trait);
+      setShowTraitSelector(false);
+      setSelectedOptionIndex(null);
+    }
+  };
+
+  const addNewTrait = () => {
+    const trimmedTrait = newTraitText.trim();
+    if (!trimmedTrait) return;
+    
+    // Add to dynamic traits state
+    const updatedDynamicTraits = { ...dynamicTraits };
+    if (!updatedDynamicTraits[newTraitCategory]) {
+      updatedDynamicTraits[newTraitCategory] = [];
+    }
+    
+    // Only add if it doesn't already exist
+    const allTraitsInCategory = [
+      ...traitCategories[newTraitCategory] || [],
+      ...updatedDynamicTraits[newTraitCategory] || []
+    ];
+    
+    if (!allTraitsInCategory.includes(trimmedTrait)) {
+      updatedDynamicTraits[newTraitCategory] = [
+        ...updatedDynamicTraits[newTraitCategory],
+        trimmedTrait
+      ];
+      setDynamicTraits(updatedDynamicTraits);
+    }
+    
+    setNewTraitText('');
+    setShowNewTraitInput(false);
+  };
+
+  // Merge hardcoded and dynamic traits
+  const getMergedTraitCategories = () => {
+    const merged = { ...traitCategories };
+    Object.entries(dynamicTraits).forEach(([category, traits]) => {
+      if (!merged[category]) {
+        merged[category] = [];
+      }
+      merged[category] = [...merged[category], ...traits];
+    });
+    return merged;
+  };
+
   const handleViewDetails = async (question) => {
     setSelectedQuestion(question);
     setShowDetailModal(true);
+  };
+
+  const getMergedCategories = () => {
+    const merged = { ...questionCategoryGroups };
+    Object.entries(dynamicCategories).forEach(([groupName, categories]) => {
+      if (!merged[groupName]) {
+        merged[groupName] = [];
+      }
+      merged[groupName] = [...new Set([...merged[groupName], ...categories])];
+    });
+    return merged;
+  };
+
+  const addNewCategory = () => {
+    const trimmedCategory = newCategoryName.trim();
+    if (!trimmedCategory) return;
+    
+    const updatedDynamicCategories = { ...dynamicCategories };
+    if (!updatedDynamicCategories[newCategoryParent]) {
+      updatedDynamicCategories[newCategoryParent] = [];
+    }
+    
+    const allInParent = [
+      ...questionCategoryGroups[newCategoryParent] || [],
+      ...updatedDynamicCategories[newCategoryParent] || []
+    ];
+    
+    if (!allInParent.includes(trimmedCategory)) {
+      updatedDynamicCategories[newCategoryParent] = [
+        ...updatedDynamicCategories[newCategoryParent],
+        trimmedCategory
+      ];
+      setDynamicCategories(updatedDynamicCategories);
+    }
+    
+    setNewCategoryName('');
+    setShowNewCategoryInput(false);
   };
 
   return (
@@ -334,71 +569,347 @@ function QuestionsPage() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => {setShowModal(false); setError('');}}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: '900px', maxHeight: '95vh', overflowY: 'auto'}}>
             <div className="modal-header">
               <h2><i className="fas fa-plus-circle"></i> Add New Question</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>
+              <button className="close-btn" onClick={() => {setShowModal(false); setError('');}}>
                 <i className="fas fa-times"></i>
               </button>
             </div>
             <form onSubmit={handleAddQuestion}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>Select Test</label>
-                  <select
-                    value={formData.test_id}
+              <div className="modal-body" style={{padding: '30px'}}>
+                {error && (
+                  <div style={{padding: '12px', background: '#C97A6F', color: '#FFF', borderRadius: '6px', marginBottom: '20px', fontSize: '14px'}}>
+                    <i className="fas fa-exclamation-circle"></i> {error}
+                  </div>
+                )}
+
+                <div className="form-group" style={{marginBottom: '25px'}}>
+                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px'}}>Smart Assessment (Adaptive)</label>
+                  <input
+                    type="text"
+                    value="Smart Assessment (Adaptive)"
+                    disabled
+                    style={{opacity: 0.6, padding: '12px', background: '#FAF5F0', border: '1px solid #E8D5C4', borderRadius: '6px', color: '#5A4A3A'}}
+                  />
+                  <input
+                    type="hidden"
+                    value={tests.find(t => t.test_name === 'Smart Assessment (Adaptive)')?.test_id || ''}
                     onChange={(e) => setFormData({ ...formData, test_id: parseInt(e.target.value) })}
-                    required
-                  >
-                    <option value="">Choose a test...</option>
-                    {tests.map(test => (
-                      <option key={test.test_id} value={test.test_id}>{test.test_name}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
-                <div className="form-group">
-                  <label>Question Text</label>
+                <div className="form-group" style={{marginBottom: '30px'}}>
+                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px', display: 'block'}}>Question Category</label>
+                  <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategorySelector(true)}
+                      style={{flex: 1, padding: '12px', border: '1px solid #E8D5C4', borderRadius: '6px', background: '#FAF5F0', color: '#5A4A3A', fontFamily: 'inherit', fontSize: '14px', textAlign: 'left', cursor: 'pointer'}}
+                    >
+                      {formData.category || 'Select a category...'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCategoryInput(!showNewCategoryInput)}
+                      style={{padding: '12px 16px', background: '#90B58D', color: '#FFF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', whiteSpace: 'nowrap'}}
+                    >
+                      <i className="fas fa-plus" style={{marginRight: '6px'}}></i> Add Category
+                    </button>
+                  </div>
+                  {showNewCategoryInput && (
+                    <div style={{marginTop: '12px', padding: '12px', background: '#FAF5F0', borderRadius: '6px', border: '1px solid #E8D5C4', display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '10px', alignItems: 'flex-end'}}>
+                      <div>
+                        <label style={{fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', marginBottom: '6px', display: 'block'}}>Category Name</label>
+                        <input
+                          type="text"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="Enter new category..."
+                          onKeyPress={(e) => e.key === 'Enter' && addNewCategory()}
+                          style={{width: '100%', padding: '8px', border: '1px solid #E8D5C4', borderRadius: '4px', background: '#FFF', color: '#5A4A3A', fontSize: '13px'}}
+                        />
+                      </div>
+                      <div>
+                        <label style={{fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', marginBottom: '6px', display: 'block'}}>Parent Group</label>
+                        <select
+                          value={newCategoryParent}
+                          onChange={(e) => setNewCategoryParent(e.target.value)}
+                          style={{width: '100%', padding: '8px', border: '1px solid #E8D5C4', borderRadius: '4px', background: '#FFF', color: '#5A4A3A', fontSize: '13px'}}
+                        >
+                          {Object.keys(getMergedCategories()).sort().map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addNewCategory}
+                        style={{padding: '8px 12px', background: '#C97A6F', color: '#FFF', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'}}
+                      >
+                        <i className="fas fa-plus"></i> Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {setShowNewCategoryInput(false); setNewCategoryName('');}}
+                        style={{padding: '8px 12px', background: '#999', color: '#FFF', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'}}
+                      >
+                        <i className="fas fa-times"></i> Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="form-group" style={{marginBottom: '30px'}}>
+                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px', display: 'block'}}>Question Text</label>
                   <textarea
                     value={formData.question_text}
                     onChange={(e) => setFormData({ ...formData, question_text: e.target.value })}
                     placeholder="Enter the question..."
                     required
-                    rows="4"
+                    rows="5"
+                    style={{width: '100%', padding: '12px', border: '1px solid #E8D5C4', borderRadius: '6px', background: '#FAF5F0', color: '#5A4A3A', fontFamily: 'inherit', fontSize: '14px', resize: 'vertical'}}
                   ></textarea>
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Question Type</label>
-                    <select
-                      value={formData.question_type}
-                      onChange={(e) => setFormData({ ...formData, question_type: e.target.value })}
+
+                <div className="form-group" style={{marginBottom: '20px'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+                    <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: 0}}>Options</label>
+                    <button 
+                      type="button" 
+                      className="btn btn-sm btn-success"
+                      onClick={addOption}
+                      style={{marginBottom: 0, background: '#90B58D', padding: '8px 16px'}}
                     >
-                      <option value="multiple_choice">Multiple Choice</option>
-                      <option value="true_false">True/False</option>
-                      <option value="short_answer">Short Answer</option>
-                    </select>
+                      <i className="fas fa-plus"></i> Add Option
+                    </button>
                   </div>
-                  <div className="form-group">
-                    <label>Question Order</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.question_order}
-                      onChange={(e) => setFormData({ ...formData, question_order: parseInt(e.target.value) })}
-                    />
+                  <div className="options-list" style={{maxHeight: '350px', overflowY: 'auto'}}>
+                    {options.length === 0 ? (
+                      <p style={{color: '#999', textAlign: 'center', padding: '20px 0', fontSize: '14px'}}>No options added yet.</p>
+                    ) : (
+                      options.map((option, index) => (
+                        <div key={index} style={{marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'flex-start'}}>
+                          <div style={{flex: 1}}>
+                            <textarea
+                              placeholder={`Option ${index + 1}`}
+                              value={option.text}
+                              onChange={(e) => updateOption(index, 'text', e.target.value)}
+                              rows="2"
+                              style={{width: '100%', padding: '14px 16px', border: '1px solid #2A2A3E', borderRadius: '8px', background: '#1F1F2E', color: '#FFF', fontSize: '14px', fontFamily: 'inherit', resize: 'none', transition: 'all 0.2s ease'}}
+                              onFocus={(e) => e.target.style.borderColor = '#C97A6F'}
+                              onBlur={(e) => e.target.style.borderColor = '#2A2A3E'}
+                            />
+                          </div>
+                          <div style={{display: 'flex', gap: '8px', paddingTop: '0px'}}>
+                            <button
+                              type="button"
+                              onClick={() => openTraitSelector(index)}
+                              style={{padding: '14px 16px', border: '1px solid #2A2A3E', borderRadius: '8px', background: option.trait ? '#C97A6F' : '#2A2A3E', color: '#FFF', cursor: 'pointer', fontSize: '12px', fontWeight: '500', transition: 'all 0.2s ease', whiteSpace: 'nowrap', minWidth: '120px', textAlign: 'center'}}
+                              onMouseEnter={(e) => {
+                                e.target.style.borderColor = '#C97A6F';
+                                if (!option.trait) {
+                                  e.target.style.background = '#3A3A4E';
+                                } else {
+                                  e.target.style.background = '#B8634F';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.borderColor = '#2A2A3E';
+                                if (!option.trait) {
+                                  e.target.style.background = '#2A2A3E';
+                                } else {
+                                  e.target.style.background = '#C97A6F';
+                                }
+                              }}
+                            >
+                              <i className="fas fa-tag" style={{marginRight: '6px'}}></i>
+                              {option.trait || 'Trait'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger"
+                              onClick={() => removeOption(index)}
+                              style={{marginBottom: 0, padding: '14px 12px', borderRadius: '8px'}}
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+              <div className="modal-footer" style={{padding: '20px 30px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #E8D5C4'}}>
+                <button type="button" className="btn btn-secondary" onClick={() => {setShowModal(false); setError(''); setFormData({test_id: '', question_text: '', category: ''}); setOptions([{ text: '', trait: '' }, { text: '', trait: '' }, { text: '', trait: '' }, { text: '', trait: '' }]);}}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Add Question
+                <button type="submit" className="btn btn-primary" disabled={!formData.question_text.trim() || options.filter(o => o.text.trim()).length === 0} style={{opacity: !formData.question_text.trim() || options.filter(o => o.text.trim()).length === 0 ? 0.5 : 1, cursor: !formData.question_text.trim() || options.filter(o => o.text.trim()).length === 0 ? 'not-allowed' : 'pointer'}}>
+                  <i className="fas fa-check"></i> Add Question
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showCategorySelector && (
+        <div className="modal-overlay" onClick={() => setShowCategorySelector(false)}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{maxHeight: '90vh', overflowY: 'auto', maxWidth: '1000px', width: '90%'}}>
+            <div className="modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <h2>Select Category</h2>
+              <button className="close-btn" onClick={() => setShowCategorySelector(false)}>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="modal-body" style={{padding: '30px'}}>
+              {Object.entries(getMergedCategories()).map(([group, categories]) => (
+                <div key={group} style={{marginBottom: '30px'}}>
+                  <h3 style={{fontSize: '14px', fontWeight: '600', textTransform: 'uppercase', color: '#C97A6F', marginBottom: '15px', letterSpacing: '0.5px'}}>
+                    {group}
+                  </h3>
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px'}}>
+                    {categories.map(category => (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, category });
+                          setShowCategorySelector(false);
+                        }}
+                        style={{
+                          padding: '12px 15px',
+                          border: '2px solid #E8D5C4',
+                          borderRadius: '6px',
+                          background: formData.category === category ? '#C97A6F' : '#FAF5F0',
+                          color: formData.category === category ? '#FFF' : '#5A4A3A',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          transition: 'all 0.2s ease',
+                          textAlign: 'center'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.background = formData.category === category ? '#B8634F' : '#F5E6D3';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.background = formData.category === category ? '#C97A6F' : '#FAF5F0';
+                        }}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCategorySelector(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTraitSelector && (
+        <div className="modal-overlay" onClick={() => setShowTraitSelector(false)}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{maxHeight: '90vh', overflowY: 'auto', maxWidth: '1000px', width: '90%'}}>
+            <div className="modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <h2>Select Trait</h2>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowNewTraitInput(!showNewTraitInput)}
+                  style={{padding: '8px 12px', background: '#90B58D', color: '#FFF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500'}}
+                >
+                  <i className="fas fa-plus" style={{marginRight: '6px'}}></i> Add Trait
+                </button>
+                <button className="close-btn" onClick={() => setShowTraitSelector(false)}>
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+            <div className="modal-body" style={{padding: '30px'}}>
+              {showNewTraitInput && (
+                <div style={{marginBottom: '25px', padding: '20px', background: '#FAF5F0', borderRadius: '8px', border: '1px solid #E8D5C4'}}>
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'flex-end'}}>
+                    <div>
+                      <label style={{fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', marginBottom: '6px', display: 'block'}}>Trait Name</label>
+                      <input
+                        type="text"
+                        value={newTraitText}
+                        onChange={(e) => setNewTraitText(e.target.value)}
+                        placeholder="Enter new trait..."
+                        onKeyPress={(e) => e.key === 'Enter' && addNewTrait()}
+                        style={{width: '100%', padding: '10px', border: '1px solid #E8D5C4', borderRadius: '6px', background: '#FFF', color: '#5A4A3A', fontSize: '14px'}}
+                      />
+                    </div>
+                    <div>
+                      <label style={{fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', marginBottom: '6px', display: 'block'}}>Category</label>
+                      <select
+                        value={newTraitCategory}
+                        onChange={(e) => setNewTraitCategory(e.target.value)}
+                        style={{width: '100%', padding: '10px', border: '1px solid #E8D5C4', borderRadius: '6px', background: '#FFF', color: '#5A4A3A', fontSize: '14px'}}
+                      >
+                        {Object.keys(traitCategories).map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addNewTrait}
+                      style={{padding: '10px 20px', background: '#C97A6F', color: '#FFF', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'}}
+                    >
+                      <i className="fas fa-plus"></i> Add
+                    </button>
+                  </div>
+                </div>
+              )}
+              {Object.entries(getMergedTraitCategories()).map(([category, traits]) => (
+                <div key={category} style={{marginBottom: '30px'}}>
+                  <h3 style={{fontSize: '14px', fontWeight: '600', textTransform: 'uppercase', color: '#C97A6F', marginBottom: '15px', letterSpacing: '0.5px'}}>
+                    {category}
+                  </h3>
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px'}}>
+                    {traits.map(trait => (
+                      <button
+                        key={trait}
+                        type="button"
+                        onClick={() => selectTrait(trait)}
+                        style={{
+                          padding: '12px 15px',
+                          border: '2px solid #E8D5C4',
+                          borderRadius: '6px',
+                          background: options[selectedOptionIndex]?.trait === trait ? '#C97A6F' : '#FAF5F0',
+                          color: options[selectedOptionIndex]?.trait === trait ? '#FFF' : '#5A4A3A',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          transition: 'all 0.2s ease',
+                          textAlign: 'center'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.background = options[selectedOptionIndex]?.trait === trait ? '#B8634F' : '#F5E6D3';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.background = options[selectedOptionIndex]?.trait === trait ? '#C97A6F' : '#FAF5F0';
+                        }}
+                      >
+                        {trait}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowTraitSelector(false)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
