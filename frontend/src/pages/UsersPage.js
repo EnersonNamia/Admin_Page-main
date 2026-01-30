@@ -224,7 +224,7 @@ function UsersPage() {
                   <td><span className="badge">{user.strand}</span></td>
                   <td>{user.gwa || 'N/A'}</td>
                   <td className="text-center">{user.tests_taken || 0}</td>
-                  <td className="text-sm">{user.last_test_date ? formatDate(user.last_test_date) : 'Never'}</td>
+                  <td className="text-sm">{user.last_login ? formatDate(user.last_login) : (user.last_test_date ? formatDate(user.last_test_date) : 'Never')}</td>
                   <td className="actions">
                     <button 
                       className="btn btn-sm btn-info"
@@ -286,8 +286,8 @@ function UsersPage() {
                   <span className="value">{selectedUser.last_test_date ? formatDate(selectedUser.last_test_date) : 'Never'}</span>
                 </div>
                 <div className="detail-item">
-                  <span className="label">Last Login:</span>
-                  <span className="value">{selectedUser.last_login ? formatDate(selectedUser.last_login) : 'Never'}</span>
+                  <span className="label">Last Active:</span>
+                  <span className="value">{selectedUser.last_login ? formatDate(selectedUser.last_login) : (selectedUser.last_test_date ? formatDate(selectedUser.last_test_date) : 'Never')}</span>
                 </div>
               </div>
 

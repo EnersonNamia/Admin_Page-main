@@ -48,7 +48,7 @@ async def get_users(
             CAST(academic_info->>'gwa' AS DECIMAL(5,2)) as gwa,
             created_at,
             is_active,
-            last_login,
+            last_active as last_login,
             (SELECT COUNT(*) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as tests_taken,
             (SELECT MAX(attempt_date) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as last_test_date
         FROM users WHERE 1=1"""
@@ -109,7 +109,10 @@ async def get_user(user_id: int):
                 academic_info->>'strand' as strand,
                 CAST(academic_info->>'gwa' AS DECIMAL(5,2)) as gwa,
                 academic_info,
-                created_at 
+                created_at,
+                last_active as last_login,
+                (SELECT COUNT(*) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as tests_taken,
+                (SELECT MAX(attempt_date) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as last_test_date
             FROM users WHERE user_id = $1""",
             [user_id]
         )
@@ -430,3 +433,32 @@ async def update_user_status(user_id: int, status: Dict[str, Any]):
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to update user status: {str(error)}")
+
+# Refresh user activity timestamp (update last_active when user logs in)
+@router.post("/{user_id}/refresh-activity")
+async def refresh_user_activity(user_id: int):
+    try:
+        from datetime import datetime, timezone
+        
+        # Check if user exists
+        user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [user_id])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Update last_login timestamp
+        current_time = datetime.now(timezone.utc)
+        execute_query(
+            'UPDATE users SET last_login = $1 WHERE user_id = $2',
+            [current_time, user_id],
+            fetch=False
+        )
+        
+        return {
+            "message": "User activity updated successfully",
+            "user_id": user_id,
+            "last_active": current_time.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to update user activity: {str(error)}")
