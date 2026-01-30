@@ -289,36 +289,118 @@ async def get_user_stats():
 # Get user test history
 @router.get("/{user_id}/test-history")
 async def get_user_test_history(user_id: int):
+    import re
     try:
         # Check if user exists
         user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [user_id])
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
+        # Get test history from test_attempts table joined with user_test_attempts for new columns
         test_history = execute_query("""
             SELECT 
-                uta.attempt_id,
-                uta.test_id,
+                ta.attempt_id,
+                ta.test_id,
                 t.test_name,
                 t.description,
                 t.test_type,
-                uta.score,
-                uta.total_questions,
-                CASE 
-                    WHEN uta.total_questions > 0 THEN ROUND((uta.score::float / uta.total_questions * 100)::numeric, 2)
-                    ELSE 0
-                END as percentage,
-                uta.attempt_date,
-                uta.time_taken
-            FROM user_test_attempts uta
-            JOIN tests t ON uta.test_id = t.test_id
-            WHERE uta.user_id = $1
-            ORDER BY uta.attempt_date DESC
+                ta.taken_at as attempt_date,
+                COALESCE(uta.max_questions, uta.total_questions, 
+                    (SELECT COUNT(*) FROM student_answers sa WHERE sa.attempt_id = ta.attempt_id)) as questions_answered,
+                uta.confidence_score,
+                uta.traits_found as traits_count_stored
+            FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.test_id
+            LEFT JOIN user_test_attempts uta ON ta.attempt_id = uta.attempt_id
+            WHERE ta.user_id = $1
+            ORDER BY ta.taken_at DESC
         """, [user_id])
         
+        # For each test attempt, get the recommendations (top courses)
+        enriched_history = []
+        for attempt in (test_history or []):
+            # Get traits from student_answers joined with options (the actual traits user selected)
+            traits_result = execute_query("""
+                SELECT DISTINCT o.trait_tag
+                FROM student_answers sa
+                JOIN options o ON sa.chosen_option_id = o.option_id
+                WHERE sa.attempt_id = $1 AND o.trait_tag IS NOT NULL
+            """, [attempt['attempt_id']])
+            
+            traits_found = [r['trait_tag'] for r in (traits_result or []) if r.get('trait_tag')]
+            
+            # Get recommendations for this attempt
+            recommendations = execute_query("""
+                SELECT 
+                    r.recommendation_id,
+                    r.course_id,
+                    c.course_name,
+                    c.description as course_description,
+                    c.trait_tag,
+                    r.reasoning,
+                    r.recommended_at
+                FROM recommendations r
+                JOIN courses c ON r.course_id = c.course_id
+                WHERE r.attempt_id = $1
+                ORDER BY r.recommended_at ASC
+            """, [attempt['attempt_id']])
+            
+            top_courses = []
+            total_match = 0
+            match_count = 0
+            
+            for rec in (recommendations or []):
+                # Extract match percentage from reasoning field (e.g., "... - Match: 94.0%")
+                reasoning = rec.get('reasoning', '') or ''
+                match_pct = 0
+                match_search = re.search(r'Match:\s*([\d.]+)%', reasoning)
+                if match_search:
+                    match_pct = float(match_search.group(1))
+                    total_match += match_pct
+                    match_count += 1
+                
+                top_courses.append({
+                    'course_id': rec['course_id'],
+                    'course_name': rec['course_name'],
+                    'course_description': rec.get('course_description', ''),
+                    'trait_tag': rec.get('trait_tag', ''),
+                    'match_percentage': match_pct,
+                    'reasoning': reasoning
+                })
+            
+            # Sort courses by match percentage descending
+            top_courses.sort(key=lambda x: x['match_percentage'], reverse=True)
+            # Take top 5
+            top_courses = top_courses[:5]
+            
+            # Use stored confidence_score if available, otherwise fall back to average match %
+            confidence = attempt.get('confidence_score')
+            if confidence is None:
+                confidence = 0
+                if match_count > 0:
+                    confidence = total_match / match_count
+            
+            # Use stored traits_count if available, otherwise use calculated count
+            traits_count = attempt.get('traits_count_stored') or len(traits_found)
+            
+            enriched_attempt = {
+                'attempt_id': attempt['attempt_id'],
+                'test_id': attempt['test_id'],
+                'test_name': attempt['test_name'],
+                'description': attempt.get('description', ''),
+                'test_type': attempt.get('test_type', ''),
+                'attempt_date': attempt['attempt_date'],
+                'questions_answered': attempt.get('questions_answered', 0),
+                'traits_found': traits_found,
+                'traits_count': traits_count,
+                'confidence': round(confidence, 1),
+                'top_courses': top_courses
+            }
+            enriched_history.append(enriched_attempt)
+        
         return {
-            "test_history": test_history or [],
-            "total_tests_taken": len(test_history) if test_history else 0
+            "test_history": enriched_history,
+            "total_tests_taken": len(enriched_history)
         }
     except HTTPException:
         raise

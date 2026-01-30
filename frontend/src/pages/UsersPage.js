@@ -16,6 +16,7 @@ function UsersPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userTestHistory, setUserTestHistory] = useState([]);
+  const [expandedAttempt, setExpandedAttempt] = useState(null);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -212,7 +213,6 @@ function UsersPage() {
                 <th>GWA</th>
                 <th>Tests Taken</th>
                 <th>Last Active</th>
-                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -224,12 +224,7 @@ function UsersPage() {
                   <td><span className="badge">{user.strand}</span></td>
                   <td>{user.gwa || 'N/A'}</td>
                   <td className="text-center">{user.tests_taken || 0}</td>
-                  <td className="text-sm">{getInactivityDays(user.last_login)}</td>
-                  <td>
-                    <span className={`status ${getOnlineStatus(user.last_login) === 'Online' ? 'active' : 'inactive'}`}>
-                      {getOnlineStatus(user.last_login)}
-                    </span>
-                  </td>
+                  <td className="text-sm">{user.last_test_date ? formatDate(user.last_test_date) : 'Never'}</td>
                   <td className="actions">
                     <button 
                       className="btn btn-sm btn-info"
@@ -256,11 +251,11 @@ function UsersPage() {
       )}
 
       {showDetailModal && selectedUser && (
-        <div className="modal-overlay" onClick={() => setShowDetailModal(false)}>
+        <div className="modal-overlay" onClick={() => { setShowDetailModal(false); setExpandedAttempt(null); }}>
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2><i className="fas fa-user-circle"></i> User Details</h2>
-              <button className="close-btn" onClick={() => setShowDetailModal(false)}>
+              <button className="close-btn" onClick={() => { setShowDetailModal(false); setExpandedAttempt(null); }}>
                 <i className="fas fa-times"></i>
               </button>
             </div>
@@ -294,110 +289,237 @@ function UsersPage() {
                   <span className="label">Last Login:</span>
                   <span className="value">{selectedUser.last_login ? formatDate(selectedUser.last_login) : 'Never'}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="label">Online Status:</span>
-                  <span className={`status ${getOnlineStatus(selectedUser.last_login) === 'Online' ? 'active' : 'inactive'}`}>
-                    {getOnlineStatus(selectedUser.last_login)}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="label">Account Status:</span>
-                  <span className={`status ${selectedUser.is_active ? 'active' : 'inactive'}`}>
-                    {selectedUser.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
               </div>
 
               <div className="test-history" style={{marginTop: '30px'}}>
-                <h3><i className="fas fa-history"></i> Test History</h3>
+                <h3><i className="fas fa-history"></i> Assessment History ({userTestHistory.length})</h3>
                 {userTestHistory.length === 0 ? (
-                  <p className="empty-text">No tests taken yet</p>
+                  <p className="empty-text">No assessments taken yet</p>
                 ) : (
-                  <div className="history-table">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Test Name</th>
-                          <th>Score</th>
-                          <th>Percentage</th>
-                          <th>Date Taken</th>
-                          <th>Time Taken</th>
-                          <th>Recommended Course</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userTestHistory.map((attempt) => (
-                          <tr key={attempt.attempt_id}>
-                            <td>{attempt.test_name}</td>
-                            <td>{attempt.score}/{attempt.total_questions}</td>
-                            <td>
-                              <span className={`percentage ${attempt.percentage >= 75 ? 'good' : attempt.percentage >= 50 ? 'fair' : 'poor'}`}>
-                                {attempt.percentage}%
+                  <div className="assessment-history-list">
+                    {userTestHistory.map((attempt, index) => (
+                      <div key={attempt.attempt_id} className="assessment-card" style={{
+                        background: '#1e293b',
+                        borderRadius: '12px',
+                        marginBottom: '12px',
+                        overflow: 'hidden',
+                        border: expandedAttempt === attempt.attempt_id ? '2px solid #6366f1' : '1px solid #334155',
+                        transition: 'all 0.2s ease'
+                      }}>
+                        {/* Clickable Header - Always visible */}
+                        <div 
+                          onClick={() => setExpandedAttempt(expandedAttempt === attempt.attempt_id ? null : attempt.attempt_id)}
+                          style={{
+                            padding: '15px 20px',
+                            background: expandedAttempt === attempt.attempt_id 
+                              ? 'linear-gradient(135deg, #1e3a5f 0%, #2d1b4e 100%)' 
+                              : '#1e293b',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            transition: 'background 0.2s ease'
+                          }}
+                        >
+                          <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                            <span style={{
+                              background: '#6366f1',
+                              color: '#fff',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}>#{index + 1}</span>
+                            <div>
+                              <h4 style={{margin: 0, color: '#fff', fontSize: '14px'}}>{attempt.test_name}</h4>
+                              <span style={{fontSize: '11px', color: '#94a3b8'}}>{formatDate(attempt.attempt_date)}</span>
+                            </div>
+                          </div>
+                          
+                          <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
+                            {/* Quick Stats */}
+                            <div style={{display: 'flex', gap: '15px', fontSize: '12px'}}>
+                              <span style={{color: '#fff'}}><strong>{attempt.questions_answered}</strong> Q</span>
+                              <span style={{color: '#a855f7'}}><strong>{attempt.traits_count}</strong> Traits</span>
+                              <span style={{color: '#22c55e'}}><strong>{attempt.confidence}%</strong></span>
+                            </div>
+                            {/* Top Course Preview */}
+                            {attempt.top_courses && attempt.top_courses.length > 0 && (
+                              <span style={{
+                                background: '#22c55e20',
+                                color: '#22c55e',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: '500',
+                                maxWidth: '150px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {attempt.top_courses[0].course_name}
                               </span>
-                            </td>
-                            <td>{formatDate(attempt.attempt_date)}</td>
-                            <td>{attempt.time_taken ? `${attempt.time_taken} min` : 'N/A'}</td>
-                            <td><span className="badge" style={{background: '#2ecc71'}}>{attempt.recommended_course || 'Pending'}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            )}
+                            {/* Expand Icon */}
+                            <i className={`fas fa-chevron-${expandedAttempt === attempt.attempt_id ? 'up' : 'down'}`} 
+                               style={{color: '#94a3b8', fontSize: '14px'}}></i>
+                          </div>
+                        </div>
+                        
+                        {/* Expanded Content */}
+                        {expandedAttempt === attempt.attempt_id && (
+                          <div style={{borderTop: '1px solid #334155'}}>
+                            {/* Stats Row */}
+                            <div style={{
+                              padding: '20px',
+                              background: 'linear-gradient(135deg, #1e3a5f 0%, #2d1b4e 100%)',
+                              borderBottom: '1px solid #334155'
+                            }}>
+                              <div style={{display: 'flex', gap: '30px', justifyContent: 'center', marginBottom: '15px'}}>
+                                <div style={{textAlign: 'center'}}>
+                                  <div style={{fontSize: '28px', fontWeight: 'bold', color: '#fff'}}>{attempt.questions_answered}</div>
+                                  <div style={{fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase'}}>Questions</div>
+                                </div>
+                                <div style={{textAlign: 'center'}}>
+                                  <div style={{fontSize: '28px', fontWeight: 'bold', color: '#a855f7'}}>{attempt.traits_count || 0}</div>
+                                  <div style={{fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase'}}>Traits Found</div>
+                                </div>
+                                <div style={{textAlign: 'center'}}>
+                                  <div style={{fontSize: '28px', fontWeight: 'bold', color: '#22c55e'}}>{attempt.confidence || 0}%</div>
+                                  <div style={{fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase'}}>Confidence</div>
+                                </div>
+                              </div>
+                              
+                              {/* Traits Tags */}
+                              {attempt.traits_found && attempt.traits_found.length > 0 && (
+                                <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center'}}>
+                                  {attempt.traits_found.map((trait, idx) => (
+                                    <span key={idx} style={{
+                                      background: '#7c3aed',
+                                      color: '#fff',
+                                      padding: '4px 12px',
+                                      borderRadius: '20px',
+                                      fontSize: '11px',
+                                      fontWeight: '500'
+                                    }}>{trait}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Top Course Recommendations */}
+                            <div style={{padding: '20px'}}>
+                              <h5 style={{margin: '0 0 15px 0', color: '#94a3b8', fontSize: '13px', textTransform: 'uppercase', fontWeight: '600'}}>
+                                <i className="fas fa-graduation-cap" style={{marginRight: '8px'}}></i>
+                                Top Course Recommendations
+                              </h5>
+                              
+                              {attempt.top_courses && attempt.top_courses.length > 0 ? (
+                                <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                                  {attempt.top_courses.map((course, idx) => (
+                                    <div key={idx} style={{
+                                      background: '#0f172a',
+                                      borderRadius: '10px',
+                                      padding: '15px',
+                                      border: `2px solid ${idx === 0 ? '#22c55e' : idx === 1 ? '#3b82f6' : '#6366f1'}`,
+                                      position: 'relative'
+                                    }}>
+                                      {/* Rank Badge */}
+                                      <div style={{
+                                        position: 'absolute',
+                                        top: '-10px',
+                                        right: '15px',
+                                        background: idx === 0 ? '#22c55e' : idx === 1 ? '#3b82f6' : '#6366f1',
+                                        color: '#fff',
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        fontWeight: 'bold'
+                                      }}>#{idx + 1}</div>
+                                      
+                                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px'}}>
+                                        <h6 style={{margin: 0, color: '#fff', fontSize: '14px', fontWeight: '600', flex: 1, paddingRight: '40px'}}>
+                                          {course.course_name}
+                                        </h6>
+                                        <span style={{
+                                          color: idx === 0 ? '#22c55e' : idx === 1 ? '#3b82f6' : '#a855f7',
+                                          fontWeight: 'bold',
+                                          fontSize: '14px'
+                                        }}>{course.match_percentage}%</span>
+                                      </div>
+                                      
+                                      {/* Match Bar */}
+                                      <div style={{
+                                        background: '#1e293b',
+                                        borderRadius: '4px',
+                                        height: '6px',
+                                        marginBottom: '10px',
+                                        overflow: 'hidden'
+                                      }}>
+                                        <div style={{
+                                          width: `${course.match_percentage}%`,
+                                          height: '100%',
+                                          background: idx === 0 ? '#22c55e' : idx === 1 ? '#3b82f6' : '#6366f1',
+                                          borderRadius: '4px',
+                                          transition: 'width 0.3s ease'
+                                        }}></div>
+                                      </div>
+                                      
+                                      {course.course_description && (
+                                        <p style={{margin: '0 0 10px 0', color: '#94a3b8', fontSize: '12px', lineHeight: '1.5'}}>
+                                          {course.course_description}
+                                        </p>
+                                      )}
+                                      
+                                      {/* Trait Tag */}
+                                      {course.trait_tag && (
+                                        <div style={{display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px'}}>
+                                          <span style={{
+                                            background: '#1e293b',
+                                            color: '#60a5fa',
+                                            padding: '3px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '10px',
+                                            border: '1px solid #334155'
+                                          }}>{course.trait_tag}</span>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Reasoning */}
+                                      <div style={{
+                                        background: '#1e293b',
+                                        borderRadius: '6px',
+                                        padding: '10px',
+                                        borderLeft: '3px solid #6366f1'
+                                      }}>
+                                        <p style={{margin: 0, fontSize: '12px', color: '#94a3b8', fontStyle: 'italic'}}>
+                                          <strong style={{color: '#a5b4fc'}}>Why this course:</strong> {course.reasoning || 'Based on your assessment results and identified traits.'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p style={{color: '#64748b', fontSize: '13px', textAlign: 'center', padding: '20px'}}>
+                                  No course recommendations available for this assessment.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-
-              {userTestHistory.length > 0 && (
-                <div className="test-details" style={{marginTop: '30px'}}>
-                  <h3><i className="fas fa-book-open"></i> Test Details & Recommendations</h3>
-                  {userTestHistory.map((attempt) => (
-                    <div key={attempt.attempt_id} className="test-detail-card" style={{
-                      background: '#2a3f5f',
-                      padding: '15px',
-                      borderRadius: '8px',
-                      marginBottom: '15px',
-                      borderLeft: `4px solid ${attempt.percentage >= 75 ? '#2ecc71' : attempt.percentage >= 50 ? '#f39c12' : '#e74c3c'}`
-                    }}>
-                      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '12px'}}>
-                        <div>
-                          <strong>{attempt.test_name}</strong>
-                          <p style={{fontSize: '12px', color: '#94a3b8', margin: '5px 0 0 0'}}>
-                            {formatDate(attempt.attempt_date)}
-                          </p>
-                        </div>
-                        <div>
-                          <span style={{fontSize: '14px', color: '#94a3b8'}}>Score: </span>
-                          <span style={{fontSize: '16px', fontWeight: 'bold', color: '#3498db'}}>
-                            {attempt.score}/{attempt.total_questions} ({attempt.percentage}%)
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{borderTop: '1px solid #334155', paddingTop: '12px'}}>
-                        <p style={{margin: '0 0 8px 0', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600'}}>
-                          Recommended Course
-                        </p>
-                        <p style={{margin: '0 0 8px 0', fontSize: '14px', color: '#2ecc71', fontWeight: '600'}}>
-                          {attempt.recommended_course}
-                        </p>
-                        {attempt.recommendation_reason && attempt.recommendation_reason !== 'N/A' && (
-                          <>
-                            <p style={{margin: '8px 0', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600'}}>
-                              Reason
-                            </p>
-                            <p style={{margin: '0', fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5'}}>
-                              {attempt.recommendation_reason}
-                            </p>
-                          </>
-                        )}
-                        {attempt.confidence_score > 0 && (
-                          <p style={{margin: '8px 0 0 0', fontSize: '12px', color: '#94a3b8'}}>
-                            Confidence: <span style={{color: '#3498db', fontWeight: '600'}}>{(attempt.confidence_score * 100).toFixed(1)}%</span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
             <div className="modal-footer">
               <button 
@@ -407,7 +529,7 @@ function UsersPage() {
                 <i className={`fas fa-${selectedUser.is_active ? 'ban' : 'check'}`}></i>
                 {selectedUser.is_active ? 'Deactivate Account' : 'Activate Account'}
               </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowDetailModal(false)}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowDetailModal(false); setExpandedAttempt(null); }}>
                 Close
               </button>
             </div>

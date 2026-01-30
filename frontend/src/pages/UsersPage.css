@@ -167,3 +167,51 @@
   }
 }
 
+/* Assessment History Cards */
+.assessment-history-list {
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.assessment-history-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.assessment-history-list::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+.assessment-history-list::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+
+.assessment-history-list::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.assessment-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.assessment-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* Dark theme overrides for detail modal */
+.modal-lg .test-history h3 {
+  color: #e2e8f0;
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.modal-lg .detail-item .label {
+  color: #94a3b8;
+}
+
+.modal-lg .detail-item .value {
+  color: #e2e8f0;
+}
