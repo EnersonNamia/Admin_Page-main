@@ -823,7 +823,53 @@ async def delete_recommendation(recommendation_id: int):
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to delete recommendation: {str(error)}")
 
-# Bulk update recommendation statuses
+# Bulk update model
+class BulkUpdateRequest(BaseModel):
+    recommendation_ids: List[int]
+    status: str
+    admin_notes: Optional[str] = None
+
+# Bulk update recommendation statuses (POST endpoint for frontend)
+@router.post("/bulk-update")
+async def bulk_update_recommendations(request: BulkUpdateRequest):
+    try:
+        valid_statuses = ['pending', 'approved', 'rejected', 'completed']
+        if request.status.lower() not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+        
+        if not request.recommendation_ids or len(request.recommendation_ids) == 0:
+            raise HTTPException(status_code=400, detail="No recommendation IDs provided")
+        
+        updated_count = 0
+        failed_ids = []
+        
+        for rec_id in request.recommendation_ids:
+            try:
+                result = execute_query("""
+                    UPDATE recommendations 
+                    SET status = $1, status_updated_at = $2, admin_notes = COALESCE($3, admin_notes), updated_by = 'admin'
+                    WHERE recommendation_id = $4
+                    RETURNING recommendation_id
+                """, [request.status.lower(), datetime.now(), request.admin_notes, rec_id])
+                if result:
+                    updated_count += 1
+                else:
+                    failed_ids.append(rec_id)
+            except Exception as e:
+                failed_ids.append(rec_id)
+        
+        return {
+            "message": f"Successfully updated {updated_count} recommendation(s) to '{request.status}'",
+            "updated_count": updated_count,
+            "failed_count": len(failed_ids),
+            "failed_ids": failed_ids if failed_ids else None
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to bulk update: {str(error)}")
+
+# Bulk update recommendation statuses (PUT endpoint - legacy)
 @router.put("/bulk/status")
 async def bulk_update_status(recommendation_ids: list[int], status: str, admin_notes: Optional[str] = None):
     try:
@@ -852,21 +898,23 @@ async def bulk_update_status(recommendation_ids: list[int], status: str, admin_n
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to bulk update: {str(error)}")
 
-# Get recommendation status statistics
+# Get recommendation status statistics (counts unique assessments by top recommendation status)
 @router.get("/stats/status")
 async def get_status_stats():
     try:
+        # Count unique assessments by the status of their top (rank 1) recommendation
         stats = execute_query("""
             SELECT 
-                status,
-                COUNT(*) as count
+                COALESCE(status, 'pending') as status,
+                COUNT(DISTINCT attempt_id) as count
             FROM recommendations
-            GROUP BY status
+            WHERE recommendation_rank = 1 OR recommendation_rank IS NULL
+            GROUP BY COALESCE(status, 'pending')
             ORDER BY status
         """)
         
         # Convert to dict
-        status_counts = {s['status'] or 'pending': int(s['count']) for s in stats}
+        status_counts = {s['status']: int(s['count']) for s in stats}
         
         # Ensure all statuses are represented
         all_statuses = ['pending', 'approved', 'rejected', 'completed']
@@ -883,7 +931,7 @@ async def get_status_stats():
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(error)}")
 
-# Get recommendations by status with filtering
+# Get recommendations by status with filtering - grouped by assessment
 @router.get("/filter/status/{status}")
 async def get_recommendations_by_status(
     status: str,
@@ -897,44 +945,104 @@ async def get_recommendations_by_status(
         
         offset = (page - 1) * limit
         
+        # Base query includes recommendation_rank
         if status.lower() == 'all':
             query = """
                 SELECT 
                     r.*,
+                    r.recommendation_rank,
                     CONCAT(u.first_name, ' ', u.last_name) as user_name,
                     u.email as user_email,
-                    c.course_name
+                    c.course_name,
+                    c.description as course_description,
+                    uta.score as assessment_score,
+                    uta.total_questions,
+                    uta.confidence_score,
+                    uta.traits_found,
+                    uta.attempt_date as assessment_date
                 FROM recommendations r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN courses c ON r.course_id = c.course_id
-                ORDER BY r.recommended_at DESC
-                LIMIT $1 OFFSET $2
+                LEFT JOIN user_test_attempts uta ON r.attempt_id = uta.attempt_id
+                ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
             """
-            count_query = "SELECT COUNT(*) as total FROM recommendations"
-            recommendations = execute_query(query, [limit, offset])
+            count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE attempt_id IS NOT NULL"
+            all_recommendations = execute_query(query)
             count_result = execute_query_one(count_query)
         else:
             query = """
                 SELECT 
                     r.*,
+                    r.recommendation_rank,
                     CONCAT(u.first_name, ' ', u.last_name) as user_name,
                     u.email as user_email,
-                    c.course_name
+                    c.course_name,
+                    c.description as course_description,
+                    uta.score as assessment_score,
+                    uta.total_questions,
+                    uta.confidence_score,
+                    uta.traits_found,
+                    uta.attempt_date as assessment_date
                 FROM recommendations r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN courses c ON r.course_id = c.course_id
+                LEFT JOIN user_test_attempts uta ON r.attempt_id = uta.attempt_id
                 WHERE COALESCE(r.status, 'pending') = $1
-                ORDER BY r.recommended_at DESC
-                LIMIT $2 OFFSET $3
+                ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
             """
-            count_query = "SELECT COUNT(*) as total FROM recommendations WHERE COALESCE(status, 'pending') = $1"
-            recommendations = execute_query(query, [status.lower(), limit, offset])
+            count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE COALESCE(status, 'pending') = $1 AND attempt_id IS NOT NULL"
+            all_recommendations = execute_query(query, [status.lower()])
             count_result = execute_query_one(count_query, [status.lower()])
         
-        total = int(count_result['total']) if count_result else 0
+        # Group recommendations by attempt_id
+        grouped_by_attempt = {}
+        for rec in all_recommendations or []:
+            attempt_id = rec.get('attempt_id')
+            if attempt_id is None:
+                attempt_id = f"no_attempt_{rec.get('recommendation_id')}"
+            
+            if attempt_id not in grouped_by_attempt:
+                grouped_by_attempt[attempt_id] = {
+                    'attempt_id': rec.get('attempt_id'),
+                    'user_id': rec.get('user_id'),
+                    'user_name': rec.get('user_name'),
+                    'user_email': rec.get('user_email'),
+                    'assessment_score': rec.get('assessment_score'),
+                    'total_questions': rec.get('total_questions'),
+                    'confidence_score': rec.get('confidence_score'),
+                    'traits_found': rec.get('traits_found'),
+                    'assessment_date': rec.get('assessment_date'),
+                    'top_recommendation': None,
+                    'other_recommendations': []
+                }
+            
+            rec_data = {
+                'recommendation_id': rec.get('recommendation_id'),
+                'course_id': rec.get('course_id'),
+                'course_name': rec.get('course_name'),
+                'course_description': rec.get('course_description'),
+                'reasoning': rec.get('reasoning'),
+                'status': rec.get('status') or 'pending',
+                'recommendation_rank': rec.get('recommendation_rank') or 1,
+                'recommended_at': rec.get('recommended_at'),
+                'admin_notes': rec.get('admin_notes')
+            }
+            
+            if rec.get('recommendation_rank') == 1 or grouped_by_attempt[attempt_id]['top_recommendation'] is None:
+                if grouped_by_attempt[attempt_id]['top_recommendation'] is None:
+                    grouped_by_attempt[attempt_id]['top_recommendation'] = rec_data
+                else:
+                    grouped_by_attempt[attempt_id]['other_recommendations'].append(rec_data)
+            else:
+                grouped_by_attempt[attempt_id]['other_recommendations'].append(rec_data)
+        
+        # Convert to list and paginate
+        grouped_list = list(grouped_by_attempt.values())
+        total = len(grouped_list)
+        paginated = grouped_list[offset:offset + limit]
         
         return {
-            "recommendations": recommendations or [],
+            "recommendations": paginated,
             "status_filter": status,
             "pagination": {
                 "page": page,
@@ -946,6 +1054,8 @@ async def get_recommendations_by_status(
     except HTTPException:
         raise
     except Exception as error:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch recommendations: {str(error)}")
 
 

@@ -5,7 +5,7 @@ import './RecommendationsPage.css';
 const API_BASE_URL = 'http://localhost:5000/api';
 
 function RecommendationsPage() {
-  const [activeTab, setActiveTab] = useState('rules'); // 'rules' or 'recommendations'
+  const [activeTab, setActiveTab] = useState('recommendations'); // Default to recommendations review
   
   // Rules state
   const [rules, setRules] = useState([]);
@@ -35,6 +35,19 @@ function RecommendationsPage() {
   const [statusStats, setStatusStats] = useState({ pending: 0, approved: 0, rejected: 0, completed: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Pagination state for recommendations
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecommendations, setTotalRecommendations] = useState(0);
+  const [itemsPerPage] = useState(25);
+  
+  // Bulk selection state
+  const [selectedRecommendations, setSelectedRecommendations] = useState([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  
+  // Expanded rows state (for showing other 4 recommendations)
+  const [expandedRows, setExpandedRows] = useState([]);
   
   // Generate recommendations state
   const [generating, setGenerating] = useState(false);
@@ -71,15 +84,25 @@ function RecommendationsPage() {
 
   useEffect(() => {
     fetchRules();
-    fetchRecommendations();
+    fetchRecommendations(1);
     fetchStatusStats();
     fetchCourses();
     fetchTraits();
   }, []);
 
   useEffect(() => {
-    fetchRecommendations();
+    setCurrentPage(1); // Reset to first page when filter changes
   }, [statusFilter]);
+
+  useEffect(() => {
+    fetchRecommendations(currentPage);
+  }, [currentPage, statusFilter]);
+
+  // Clear selections and expanded rows when filter or page changes
+  useEffect(() => {
+    setSelectedRecommendations([]);
+    setExpandedRows([]);
+  }, [statusFilter, currentPage]);
 
   const fetchRules = async () => {
     try {
@@ -93,19 +116,30 @@ function RecommendationsPage() {
     }
   };
 
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = async (page = currentPage) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/recommendations/filter/status/${statusFilter}`);
+      setLoading(true);
+      const response = await axios.get(`${API_BASE_URL}/recommendations/filter/status/${statusFilter}?page=${page}&limit=${itemsPerPage}`);
       setRecommendations(response.data.recommendations || []);
+      if (response.data.pagination) {
+        setTotalPages(response.data.pagination.pages || 1);
+        setTotalRecommendations(response.data.pagination.total || 0);
+      }
     } catch (err) {
       console.error('Failed to load recommendations:', err);
       // Fallback to regular endpoint if filter fails
       try {
-        const response = await axios.get(`${API_BASE_URL}/recommendations`);
+        const response = await axios.get(`${API_BASE_URL}/recommendations?page=${page}&limit=${itemsPerPage}`);
         setRecommendations(response.data.recommendations || []);
+        if (response.data.pagination) {
+          setTotalPages(response.data.pagination.pages || 1);
+          setTotalRecommendations(response.data.pagination.total || 0);
+        }
       } catch (e) {
         console.error('Fallback also failed:', e);
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -167,7 +201,7 @@ function RecommendationsPage() {
   const handleEditRecommendation = async (rec) => {
     setEditingRecommendation(rec);
     setEditForm({
-      course_id: rec.course_id || '',
+      course_id: '', // Empty means keep original
       reasoning: rec.reasoning || '',
       status: rec.status || 'pending',
       admin_notes: rec.admin_notes || ''
@@ -178,12 +212,23 @@ function RecommendationsPage() {
   const handleSubmitEdit = async (e) => {
     e.preventDefault();
     try {
-      await axios.put(`${API_BASE_URL}/recommendations/edit/${editingRecommendation.recommendation_id}`, {
-        course_id: parseInt(editForm.course_id),
-        reasoning: editForm.reasoning,
+      // Build payload - only include course_id if it was changed
+      const payload = {
         status: editForm.status,
         admin_notes: editForm.admin_notes
-      });
+      };
+      
+      // Only include course_id if admin wants to override
+      if (editForm.course_id) {
+        payload.course_id = parseInt(editForm.course_id);
+      }
+      
+      // Keep original reasoning unless course was changed
+      if (editForm.reasoning !== editingRecommendation.reasoning) {
+        payload.reasoning = editForm.reasoning;
+      }
+      
+      await axios.put(`${API_BASE_URL}/recommendations/edit/${editingRecommendation.recommendation_id}`, payload);
       setShowEditModal(false);
       setEditingRecommendation(null);
       fetchRecommendations();
@@ -216,6 +261,68 @@ function RecommendationsPage() {
       fetchStatusStats();
     } catch (err) {
       setError('Failed to delete recommendation');
+    }
+  };
+
+  // Bulk selection functions
+  const handleSelectRecommendation = (recId) => {
+    setSelectedRecommendations(prev => {
+      if (prev.includes(recId)) {
+        return prev.filter(id => id !== recId);
+      } else {
+        return [...prev, recId];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    // Get all top recommendation IDs that are pending
+    const pendingTopRecs = recommendations
+      .filter(r => r.top_recommendation && (!r.top_recommendation.status || r.top_recommendation.status === 'pending'))
+      .map(r => r.top_recommendation.recommendation_id);
+    
+    if (selectedRecommendations.length === pendingTopRecs.length && pendingTopRecs.length > 0) {
+      setSelectedRecommendations([]);
+    } else {
+      setSelectedRecommendations(pendingTopRecs);
+    }
+  };
+
+  // Toggle expanded row to show other recommendations
+  const toggleExpandRow = (attemptId) => {
+    setExpandedRows(prev => {
+      if (prev.includes(attemptId)) {
+        return prev.filter(id => id !== attemptId);
+      } else {
+        return [...prev, attemptId];
+      }
+    });
+  };
+
+  const handleBulkAction = async (newStatus) => {
+    if (selectedRecommendations.length === 0) {
+      setError('Please select at least one recommendation');
+      return;
+    }
+
+    const actionWord = newStatus === 'approved' ? 'approve' : newStatus === 'rejected' ? 'reject' : 'update';
+    if (!window.confirm(`Are you sure you want to ${actionWord} ${selectedRecommendations.length} recommendation(s)?`)) {
+      return;
+    }
+
+    setBulkActionLoading(true);
+    try {
+      await axios.post(`${API_BASE_URL}/recommendations/bulk-update`, {
+        recommendation_ids: selectedRecommendations,
+        status: newStatus
+      });
+      setSelectedRecommendations([]);
+      fetchRecommendations();
+      fetchStatusStats();
+    } catch (err) {
+      setError(err.response?.data?.detail || `Failed to ${actionWord} recommendations`);
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -440,8 +547,8 @@ function RecommendationsPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1><i className="fas fa-lightbulb"></i> Recommendations</h1>
-        <p>Manage recommendation rules and track course recommendations</p>
+        <h1><i className="fas fa-lightbulb"></i> Course Recommendations</h1>
+        <p>Review and manage assessment-generated course recommendations</p>
       </div>
 
       {error && (
@@ -454,22 +561,22 @@ function RecommendationsPage() {
       {/* Tabs */}
       <div className="tabs-container">
         <button 
-          className={`tab-btn ${activeTab === 'rules' ? 'active' : ''}`}
-          onClick={() => setActiveTab('rules')}
-        >
-          <i className="fas fa-cogs"></i> Recommendation Rules
-        </button>
-        <button 
           className={`tab-btn ${activeTab === 'recommendations' ? 'active' : ''}`}
           onClick={() => setActiveTab('recommendations')}
         >
-          <i className="fas fa-list"></i> All Recommendations
+          <i className="fas fa-clipboard-check"></i> Review Recommendations
         </button>
         <button 
           className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => { setActiveTab('history'); fetchHistory(); fetchTimeline(); }}
         >
-          <i className="fas fa-history"></i> View History
+          <i className="fas fa-history"></i> History
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'rules' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rules')}
+        >
+          <i className="fas fa-cogs"></i> Matching Rules
         </button>
       </div>
 
@@ -477,20 +584,18 @@ function RecommendationsPage() {
       {activeTab === 'rules' && (
         <div className="tab-content">
           <div className="section-header">
-            <h2>Recommendation Rules</h2>
-            <p>Define criteria for automatic course recommendations</p>
+            <h2><i className="fas fa-cogs"></i> Course Matching Rules</h2>
+            <p>These rules define how assessment scores are matched to course recommendations. When students complete assessments, these rules determine which courses to suggest.</p>
             <div className="header-actions">
               <button className="btn btn-primary" onClick={handleCreateRule}>
                 <i className="fas fa-plus"></i> Create New Rule
               </button>
-              <button 
-                className="btn btn-success" 
-                onClick={() => setShowGenerateModal(true)}
-                disabled={rules.length === 0}
-              >
-                <i className="fas fa-magic"></i> Generate Recommendations
-              </button>
             </div>
+          </div>
+
+          <div className="info-banner">
+            <i className="fas fa-info-circle"></i>
+            <span>Rules are automatically applied when students complete their assessments. The system generates recommendations based on trait scores, GWA, and strand matching.</span>
           </div>
 
           {loading ? (
@@ -498,8 +603,8 @@ function RecommendationsPage() {
           ) : rules.length === 0 ? (
             <div className="empty-state">
               <i className="fas fa-cogs"></i>
-              <h3>No Rules Created Yet</h3>
-              <p>Create your first recommendation rule to start automating course suggestions.</p>
+              <h3>No Matching Rules Created Yet</h3>
+              <p>Create rules to define how assessment results are matched to course recommendations.</p>
               <button className="btn btn-primary" onClick={handleCreateRule}>
                 <i className="fas fa-plus"></i> Create First Rule
               </button>
@@ -561,8 +666,8 @@ function RecommendationsPage() {
       {activeTab === 'recommendations' && (
         <div className="tab-content">
           <div className="section-header">
-            <h2>All Recommendations</h2>
-            <p>View and manage student course recommendations</p>
+            <h2><i className="fas fa-clipboard-check"></i> Assessment-Based Recommendations</h2>
+            <p>Review recommendations generated from student assessments. Approve, reject, or mark as completed.</p>
             <button className="btn btn-secondary" onClick={handleOpenExport}>
               <i className="fas fa-file-export"></i> Export Reports
             </button>
@@ -584,10 +689,10 @@ function RecommendationsPage() {
               className={`stat-card pending ${statusFilter === 'pending' ? 'active' : ''}`}
               onClick={() => setStatusFilter('pending')}
             >
-              <i className="fas fa-clock"></i>
+              <i className="fas fa-hourglass-half"></i>
               <div className="stat-info">
                 <span className="stat-value">{statusStats.pending || 0}</span>
-                <span className="stat-label">Pending</span>
+                <span className="stat-label">Pending Review</span>
               </div>
             </div>
             <div 
@@ -628,60 +733,288 @@ function RecommendationsPage() {
               <p>No {statusFilter !== 'all' ? statusFilter : ''} recommendations found</p>
             </div>
           ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Email</th>
-                    <th>Recommended Course</th>
-                    <th>Reasoning</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recommendations.map((rec) => (
-                    <tr key={rec.recommendation_id}>
-                      <td><strong>{rec.user_name}</strong></td>
-                      <td>{rec.user_email}</td>
-                      <td><span className="course-badge">{rec.course_name}</span></td>
-                      <td className="reasoning-cell">{rec.reasoning || 'N/A'}</td>
-                      <td>
-                        <select 
-                          value={rec.status || 'pending'} 
-                          onChange={(e) => handleQuickStatusChange(rec.recommendation_id, e.target.value)}
-                          className={`status-select ${rec.status || 'pending'}`}
-                          title="Click to change status"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                      </td>
-                      <td>{rec.recommended_at ? new Date(rec.recommended_at).toLocaleDateString() : 'N/A'}</td>
-                      <td className="actions-cell">
-                        <button 
-                          className="btn btn-sm btn-secondary" 
-                          onClick={() => handleEditRecommendation(rec)}
-                          title="Edit"
-                        >
-                          <i className="fas fa-edit"></i>
-                        </button>
-                        <button 
-                          className="btn btn-sm btn-danger" 
-                          onClick={() => handleDeleteRecommendation(rec.recommendation_id)}
-                          title="Delete"
-                        >
-                          <i className="fas fa-trash"></i>
-                        </button>
-                      </td>
+            <>
+              {/* Bulk Actions Bar */}
+              {selectedRecommendations.length > 0 && (
+                <div className="bulk-actions-bar">
+                  <div className="bulk-info">
+                    <i className="fas fa-check-square"></i>
+                    <span><strong>{selectedRecommendations.length}</strong> recommendation(s) selected</span>
+                  </div>
+                  <div className="bulk-buttons">
+                    <button 
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleBulkAction('approved')}
+                      disabled={bulkActionLoading}
+                    >
+                      <i className="fas fa-check"></i> Approve All
+                    </button>
+                    <button 
+                      className="btn btn-warning btn-sm"
+                      onClick={() => handleBulkAction('rejected')}
+                      disabled={bulkActionLoading}
+                    >
+                      <i className="fas fa-times"></i> Reject All
+                    </button>
+                    <button 
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleBulkAction('completed')}
+                      disabled={bulkActionLoading}
+                    >
+                      <i className="fas fa-flag-checkered"></i> Mark Completed
+                    </button>
+                    <button 
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setSelectedRecommendations([])}
+                      disabled={bulkActionLoading}
+                    >
+                      <i className="fas fa-times-circle"></i> Clear Selection
+                    </button>
+                  </div>
+                  {bulkActionLoading && (
+                    <div className="bulk-loading">
+                      <i className="fas fa-spinner fa-spin"></i> Processing...
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th className="checkbox-col">
+                        <input 
+                          type="checkbox"
+                          checked={selectedRecommendations.length > 0 && 
+                            selectedRecommendations.length === recommendations.filter(r => r.top_recommendation && (!r.top_recommendation.status || r.top_recommendation.status === 'pending')).length}
+                          onChange={handleSelectAll}
+                          title="Select all pending recommendations"
+                        />
+                      </th>
+                      <th style={{width: '30px'}}></th>
+                      <th>Student</th>
+                      <th>Top Recommended Course</th>
+                      <th>Assessment Info</th>
+                      <th>Match Reason</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {recommendations.map((assessment) => {
+                      const topRec = assessment.top_recommendation;
+                      const otherRecs = assessment.other_recommendations || [];
+                      const isExpanded = expandedRows.includes(assessment.attempt_id);
+                      
+                      if (!topRec) return null;
+                      
+                      return (
+                        <React.Fragment key={assessment.attempt_id || topRec.recommendation_id}>
+                          {/* Main row - Top Recommendation */}
+                          <tr className={`status-row-${topRec.status || 'pending'} ${selectedRecommendations.includes(topRec.recommendation_id) ? 'selected' : ''} main-recommendation-row`}>
+                            <td className="checkbox-col">
+                              <input 
+                                type="checkbox"
+                                checked={selectedRecommendations.includes(topRec.recommendation_id)}
+                                onChange={() => handleSelectRecommendation(topRec.recommendation_id)}
+                                disabled={topRec.status && topRec.status !== 'pending'}
+                              />
+                            </td>
+                            <td className="expand-col">
+                              {otherRecs.length > 0 && (
+                                <button 
+                                  className={`expand-btn ${isExpanded ? 'expanded' : ''}`}
+                                  onClick={() => toggleExpandRow(assessment.attempt_id)}
+                                  title={isExpanded ? 'Hide other recommendations' : `Show ${otherRecs.length} more recommendations`}
+                                >
+                                  <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'}`}></i>
+                                </button>
+                              )}
+                            </td>
+                            <td>
+                              <div className="student-info">
+                                <strong>{assessment.user_name}</strong>
+                                <span className="student-email">{assessment.user_email}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="top-course-container">
+                                <span className="course-badge top-course">
+                                  <i className="fas fa-trophy"></i> {topRec.course_name}
+                                </span>
+                                {otherRecs.length > 0 && (
+                                  <span className="other-courses-count" onClick={() => toggleExpandRow(assessment.attempt_id)}>
+                                    +{otherRecs.length} more
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="assessment-info">
+                                {assessment.confidence_score ? (
+                                  <>
+                                    <div className="assessment-stat">
+                                      <i className="fas fa-chart-line"></i>
+                                      <span className="stat-label">Confidence:</span>
+                                      <span className={`stat-value ${assessment.confidence_score >= 70 ? 'high' : assessment.confidence_score >= 40 ? 'medium' : 'low'}`}>
+                                        {assessment.confidence_score?.toFixed(1)}%
+                                      </span>
+                                    </div>
+                                    <div className="assessment-stat">
+                                      <i className="fas fa-brain"></i>
+                                      <span className="stat-label">Traits:</span>
+                                      <span className="stat-value">{assessment.traits_found || 0}</span>
+                                    </div>
+                                    <div className="assessment-stat">
+                                      <i className="fas fa-question-circle"></i>
+                                      <span className="stat-label">Questions:</span>
+                                      <span className="stat-value">{assessment.total_questions || 0}</span>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span className="no-assessment">No assessment data</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="reasoning-cell" title={topRec.reasoning}>{topRec.reasoning || 'N/A'}</td>
+                            <td>
+                              <select 
+                                value={topRec.status || 'pending'} 
+                                onChange={(e) => handleQuickStatusChange(topRec.recommendation_id, e.target.value)}
+                                className={`status-select ${topRec.status || 'pending'}`}
+                                title="Click to change status"
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                                <option value="completed">Completed</option>
+                              </select>
+                            </td>
+                            <td className="actions-cell">
+                              {(topRec.status === 'pending' || !topRec.status) && (
+                                <>
+                                  <button 
+                                    className="btn btn-sm btn-success" 
+                                    onClick={() => handleQuickStatusChange(topRec.recommendation_id, 'approved')}
+                                    title="Approve Recommendation"
+                                  >
+                                    <i className="fas fa-check"></i>
+                                  </button>
+                                  <button 
+                                    className="btn btn-sm btn-warning" 
+                                    onClick={() => handleQuickStatusChange(topRec.recommendation_id, 'rejected')}
+                                    title="Reject Recommendation"
+                                  >
+                                    <i className="fas fa-times"></i>
+                                  </button>
+                                </>
+                              )}
+                              <button 
+                                className="btn btn-sm btn-secondary" 
+                                onClick={() => handleEditRecommendation({...topRec, user_name: assessment.user_name, user_email: assessment.user_email, confidence_score: assessment.confidence_score, traits_found: assessment.traits_found, total_questions: assessment.total_questions, assessment_date: assessment.assessment_date})}
+                                title="Edit Details"
+                              >
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button 
+                                className="btn btn-sm btn-danger" 
+                                onClick={() => handleDeleteRecommendation(topRec.recommendation_id)}
+                                title="Delete"
+                              >
+                                <i className="fas fa-trash"></i>
+                              </button>
+                            </td>
+                          </tr>
+                          
+                          {/* Expanded rows - Other Recommendations */}
+                          {isExpanded && otherRecs.map((otherRec, index) => (
+                            <tr key={otherRec.recommendation_id} className={`status-row-${otherRec.status || 'pending'} sub-recommendation-row`}>
+                              <td className="checkbox-col"></td>
+                              <td className="expand-col">
+                                <span className="sub-row-indicator">└</span>
+                              </td>
+                              <td>
+                                <span className="rank-badge">#{index + 2}</span>
+                              </td>
+                              <td>
+                                <span className="course-badge sub-course">{otherRec.course_name}</span>
+                              </td>
+                              <td className="sub-assessment-cell">
+                                <span className="sub-label">Alternative recommendation</span>
+                              </td>
+                              <td className="reasoning-cell" title={otherRec.reasoning}>{otherRec.reasoning || 'N/A'}</td>
+                              <td>
+                                <select 
+                                  value={otherRec.status || 'pending'} 
+                                  onChange={(e) => handleQuickStatusChange(otherRec.recommendation_id, e.target.value)}
+                                  className={`status-select ${otherRec.status || 'pending'} small`}
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="approved">Approved</option>
+                                  <option value="rejected">Rejected</option>
+                                  <option value="completed">Completed</option>
+                                </select>
+                              </td>
+                              <td className="actions-cell">
+                                <button 
+                                  className="btn btn-sm btn-secondary" 
+                                  onClick={() => handleEditRecommendation({...otherRec, user_name: assessment.user_name, user_email: assessment.user_email, confidence_score: assessment.confidence_score, traits_found: assessment.traits_found, total_questions: assessment.total_questions, assessment_date: assessment.assessment_date})}
+                                  title="Edit Details"
+                                >
+                                  <i className="fas fa-edit"></i>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* Pagination Controls */}
+          {recommendations.length > 0 && totalPages > 1 && (
+            <div className="pagination-controls">
+              <div className="pagination-info">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, totalRecommendations)} of {totalRecommendations} assessments
+              </div>
+              <div className="pagination-buttons">
+                <button 
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                >
+                  <i className="fas fa-angle-double-left"></i>
+                </button>
+                <button 
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <i className="fas fa-angle-left"></i> Previous
+                </button>
+                <span className="page-indicator">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button 
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next <i className="fas fa-angle-right"></i>
+                </button>
+                <button 
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  <i className="fas fa-angle-double-right"></i>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1026,223 +1359,170 @@ function RecommendationsPage() {
         </div>
       )}
 
-      {/* Generate Recommendations Modal */}
-      {showGenerateModal && (
-        <div className="modal-overlay" onClick={() => !generating && setShowGenerateModal(false)}>
-          <div className="modal generate-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2><i className="fas fa-magic"></i> Generate Recommendations</h2>
-              <button 
-                className="modal-close" 
-                onClick={() => setShowGenerateModal(false)}
-                disabled={generating}
-              >
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <div className="modal-body">
-              {!generateResult ? (
-                <>
-                  <div className="generate-info">
-                    <i className="fas fa-info-circle"></i>
-                    <p>
-                      This will analyze all students and generate course recommendations based on your active rules.
-                      The engine considers:
-                    </p>
-                    <ul>
-                      <li><strong>GWA:</strong> Academic performance thresholds</li>
-                      <li><strong>Strand:</strong> Senior high school track matching</li>
-                      <li><strong>Traits:</strong> Personality and skill assessments</li>
-                      <li><strong>Assessment Scores:</strong> Test performance ranges</li>
-                    </ul>
-                  </div>
+      {/* Generate Recommendations Modal - REMOVED: Recommendations are now auto-generated from assessments */}
 
-                  <div className="generate-stats">
-                    <div className="stat-item">
-                      <i className="fas fa-cogs"></i>
-                      <span className="stat-value">{rules.filter(r => r.is_active).length}</span>
-                      <span className="stat-label">Active Rules</span>
-                    </div>
-                  </div>
-
-                  <div className="generate-options">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={generateOptions.overwrite_existing}
-                        onChange={(e) => setGenerateOptions({...generateOptions, overwrite_existing: e.target.checked})}
-                        disabled={generating}
-                      />
-                      Overwrite existing recommendations
-                    </label>
-                    <small>If unchecked, existing recommendations will be preserved.</small>
-                  </div>
-                </>
-              ) : (
-                <div className={`generate-result ${generateResult.error ? 'error' : 'success'}`}>
-                  {generateResult.error ? (
-                    <>
-                      <i className="fas fa-exclamation-circle"></i>
-                      <h3>Generation Failed</h3>
-                      <p>{generateResult.message}</p>
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-check-circle"></i>
-                      <h3>Recommendations Generated!</h3>
-                      <div className="result-stats">
-                        <div className="result-stat">
-                          <span className="number">{generateResult.generated}</span>
-                          <span className="label">Created</span>
-                        </div>
-                        <div className="result-stat">
-                          <span className="number">{generateResult.skipped || 0}</span>
-                          <span className="label">Skipped</span>
-                        </div>
-                        <div className="result-stat">
-                          <span className="number">{generateResult.students_processed || 0}</span>
-                          <span className="label">Students</span>
-                        </div>
-                        <div className="result-stat">
-                          <span className="number">{generateResult.rules_applied || 0}</span>
-                          <span className="label">Rules Used</span>
-                        </div>
-                      </div>
-                      {generateResult.details && generateResult.details.length > 0 && (
-                        <div className="result-details">
-                          <h4>Sample Results:</h4>
-                          <ul>
-                            {generateResult.details.slice(0, 5).map((detail, idx) => (
-                              <li key={idx}>
-                                <strong>{detail.name}</strong>
-                                {detail.recommendations.map((rec, ridx) => (
-                                  <span key={ridx} className="rec-badge">{rec.course}</span>
-                                ))}
-                              </li>
-                            ))}
-                          </ul>
-                          {generateResult.details.length > 5 && (
-                            <p className="more-results">...and {generateResult.details.length - 5} more students</p>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              {!generateResult ? (
-                <>
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    onClick={() => setShowGenerateModal(false)}
-                    disabled={generating}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-success" 
-                    onClick={handleGenerateRecommendations}
-                    disabled={generating || rules.filter(r => r.is_active).length === 0}
-                  >
-                    {generating ? (
-                      <><i className="fas fa-spinner fa-spin"></i> Generating...</>
-                    ) : (
-                      <><i className="fas fa-magic"></i> Generate Now</>
-                    )}
-                  </button>
-                </>
-              ) : (
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
-                  onClick={() => {
-                    setShowGenerateModal(false);
-                    setGenerateResult(null);
-                    setActiveTab('recommendations');
-                  }}
-                >
-                  <i className="fas fa-list"></i> View Recommendations
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Recommendation Modal */}
+      {/* Edit Recommendation Modal - Enhanced with Assessment Details */}
       {showEditModal && editingRecommendation && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal edit-recommendation-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2><i className="fas fa-edit"></i> Edit Recommendation</h2>
+              <h2><i className="fas fa-clipboard-check"></i> Review Recommendation</h2>
               <button className="close-btn" onClick={() => setShowEditModal(false)}>
                 <i className="fas fa-times"></i>
               </button>
             </div>
             <form onSubmit={handleSubmitEdit}>
               <div className="modal-body">
-                <div className="edit-info">
-                  <div className="info-row">
-                    <span className="info-label">Student:</span>
-                    <span className="info-value">{editingRecommendation.user_name}</span>
+                {/* Student & Assessment Context Section */}
+                <div className="review-context">
+                  <div className="context-section student-section">
+                    <h3><i className="fas fa-user-graduate"></i> Student Information</h3>
+                    <div className="context-grid">
+                      <div className="context-item">
+                        <span className="context-label">Name</span>
+                        <span className="context-value">{editingRecommendation.user_name}</span>
+                      </div>
+                      <div className="context-item">
+                        <span className="context-label">Email</span>
+                        <span className="context-value">{editingRecommendation.user_email}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="info-row">
-                    <span className="info-label">Email:</span>
-                    <span className="info-value">{editingRecommendation.user_email}</span>
+
+                  <div className="context-section assessment-section">
+                    <h3><i className="fas fa-chart-bar"></i> Assessment Results</h3>
+                    {editingRecommendation.confidence_score ? (
+                      <div className="assessment-details">
+                        <div className="assessment-metric">
+                          <div className="metric-icon confidence">
+                            <i className="fas fa-chart-line"></i>
+                          </div>
+                          <div className="metric-info">
+                            <span className="metric-value">{editingRecommendation.confidence_score?.toFixed(1)}%</span>
+                            <span className="metric-label">Confidence Score</span>
+                          </div>
+                          <div className={`metric-badge ${editingRecommendation.confidence_score >= 70 ? 'high' : editingRecommendation.confidence_score >= 40 ? 'medium' : 'low'}`}>
+                            {editingRecommendation.confidence_score >= 70 ? 'High Match' : editingRecommendation.confidence_score >= 40 ? 'Moderate Match' : 'Low Match'}
+                          </div>
+                        </div>
+                        <div className="assessment-metric">
+                          <div className="metric-icon traits">
+                            <i className="fas fa-brain"></i>
+                          </div>
+                          <div className="metric-info">
+                            <span className="metric-value">{editingRecommendation.traits_found || 0}</span>
+                            <span className="metric-label">Traits Identified</span>
+                          </div>
+                        </div>
+                        <div className="assessment-metric">
+                          <div className="metric-icon questions">
+                            <i className="fas fa-question-circle"></i>
+                          </div>
+                          <div className="metric-info">
+                            <span className="metric-value">{editingRecommendation.total_questions || 0}</span>
+                            <span className="metric-label">Questions Answered</span>
+                          </div>
+                        </div>
+                        <div className="assessment-metric">
+                          <div className="metric-icon date">
+                            <i className="fas fa-calendar-alt"></i>
+                          </div>
+                          <div className="metric-info">
+                            <span className="metric-value">
+                              {editingRecommendation.assessment_date 
+                                ? new Date(editingRecommendation.assessment_date).toLocaleDateString() 
+                                : 'N/A'}
+                            </span>
+                            <span className="metric-label">Assessment Date</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="no-assessment-data">
+                        <i className="fas fa-exclamation-triangle"></i>
+                        <p>No assessment data available for this recommendation</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="context-section recommendation-section">
+                    <h3><i className="fas fa-graduation-cap"></i> System Recommendation</h3>
+                    <div className="original-recommendation">
+                      <span className="course-badge large">{editingRecommendation.course_name}</span>
+                      <p className="original-reasoning">
+                        <strong>Match Reason:</strong> {editingRecommendation.reasoning || 'No reasoning provided'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Recommended Course *</label>
-                  <select
-                    value={editForm.course_id}
-                    onChange={(e) => setEditForm({...editForm, course_id: e.target.value})}
-                    required
-                  >
-                    <option value="">Select a course</option>
-                    {courses.map(course => (
-                      <option key={course.course_id} value={course.course_id}>
-                        {course.course_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Admin Decision Section */}
+                <div className="admin-decision-section">
+                  <h3><i className="fas fa-user-shield"></i> Admin Decision</h3>
+                  
+                  <div className="quick-actions">
+                    <button 
+                      type="button"
+                      className={`quick-action-btn approve ${editForm.status === 'approved' ? 'active' : ''}`}
+                      onClick={() => setEditForm({...editForm, status: 'approved'})}
+                    >
+                      <i className="fas fa-check-circle"></i>
+                      <span>Approve</span>
+                    </button>
+                    <button 
+                      type="button"
+                      className={`quick-action-btn reject ${editForm.status === 'rejected' ? 'active' : ''}`}
+                      onClick={() => setEditForm({...editForm, status: 'rejected'})}
+                    >
+                      <i className="fas fa-times-circle"></i>
+                      <span>Reject</span>
+                    </button>
+                    <button 
+                      type="button"
+                      className={`quick-action-btn complete ${editForm.status === 'completed' ? 'active' : ''}`}
+                      onClick={() => setEditForm({...editForm, status: 'completed'})}
+                    >
+                      <i className="fas fa-flag-checkered"></i>
+                      <span>Mark Completed</span>
+                    </button>
+                    <button 
+                      type="button"
+                      className={`quick-action-btn pending ${editForm.status === 'pending' ? 'active' : ''}`}
+                      onClick={() => setEditForm({...editForm, status: 'pending'})}
+                    >
+                      <i className="fas fa-clock"></i>
+                      <span>Keep Pending</span>
+                    </button>
+                  </div>
 
-                <div className="form-group">
-                  <label>Status</label>
-                  <select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({...editForm, status: e.target.value})}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label><i className="fas fa-book"></i> Override Course (Optional)</label>
+                      <select
+                        value={editForm.course_id}
+                        onChange={(e) => setEditForm({...editForm, course_id: e.target.value})}
+                      >
+                        <option value="">Keep original: {editingRecommendation.course_name}</option>
+                        {courses.map(course => (
+                          <option key={course.course_id} value={course.course_id}>
+                            {course.course_name}
+                          </option>
+                        ))}
+                      </select>
+                      <small className="form-hint">Only change if you believe a different course is more suitable</small>
+                    </div>
+                  </div>
 
-                <div className="form-group">
-                  <label>Reasoning</label>
-                  <textarea
-                    value={editForm.reasoning}
-                    onChange={(e) => setEditForm({...editForm, reasoning: e.target.value})}
-                    placeholder="Why is this course recommended?"
-                    rows="3"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Admin Notes</label>
-                  <textarea
-                    value={editForm.admin_notes}
-                    onChange={(e) => setEditForm({...editForm, admin_notes: e.target.value})}
-                    placeholder="Internal notes (not visible to student)"
-                    rows="2"
-                  />
+                  <div className="form-group">
+                    <label><i className="fas fa-comment-alt"></i> Admin Notes</label>
+                    <textarea
+                      value={editForm.admin_notes}
+                      onChange={(e) => setEditForm({...editForm, admin_notes: e.target.value})}
+                      placeholder="Add notes explaining your decision (e.g., why you approved, rejected, or changed the course)..."
+                      rows="3"
+                    />
+                    <small className="form-hint">These notes are for internal admin reference only</small>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
@@ -1250,7 +1530,7 @@ function RecommendationsPage() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  <i className="fas fa-save"></i> Save Changes
+                  <i className="fas fa-save"></i> Save Decision
                 </button>
               </div>
             </form>
