@@ -91,6 +91,30 @@ const FeedbackPage = () => {
     setFilters({ rating: '', search: '', user_id: '' });
   };
 
+  // Export feedback to CSV
+  const exportToCSV = () => {
+    const headers = ['Rating', 'Student Name', 'Student Email', 'Course', 'Feedback', 'Date'];
+    const csvData = feedback.map(item => [
+      item.rating,
+      item.user_name || '',
+      item.user_email || '',
+      item.course_name || '',
+      item.feedback_text || 'No feedback',
+      item.created_at ? new Date(item.created_at).toLocaleString() : ''
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `feedback_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
   const StarRating = ({ rating, size = 'medium' }) => {
     const sizeClass = size === 'small' ? 'star-small' : 'star-medium';
     return (
@@ -278,6 +302,27 @@ const FeedbackPage = () => {
           onClick={clearFilters}
         >
           Clear Filters
+        </button>
+
+        <button
+          className="export-btn"
+          onClick={exportToCSV}
+          title="Export to CSV"
+          style={{
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            color: '#fff',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}
+        >
+          <i className="fas fa-download"></i> Export CSV
         </button>
       </div>
 

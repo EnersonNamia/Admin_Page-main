@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './UsersPage.css';
+import { useToast } from '../components/Toast';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
 function UsersPage() {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -14,6 +16,8 @@ function UsersPage() {
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'inactive'
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userTestHistory, setUserTestHistory] = useState([]);
   const [expandedAttempt, setExpandedAttempt] = useState(null);
@@ -74,21 +78,37 @@ function UsersPage() {
       setFormData({ full_name: '', email: '', strand: 'STEM', gwa: '' });
       setShowModal(false);
       fetchUsers();
+      toast.success('User added successfully!');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add user');
+      toast.error(err.response?.data?.message || 'Failed to add user');
+    }
+  };
+
+  const handleDeleteClick = (user) => {
+    setDeleteTarget(user);
+    setDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/users/${deleteTarget.user_id}`);
+      fetchUsers();
+      setDeleteModal(false);
+      setDeleteTarget(null);
+      toast.success('User deleted successfully!');
+    } catch (err) {
+      toast.error('Failed to delete user');
     }
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    try {
-      await axios.delete(`${API_BASE_URL}/users/${userId}`);
-      fetchUsers();
-    } catch (err) {
-      setError('Failed to delete user');
+    // Legacy function - now uses modal
+    const user = users.find(u => u.user_id === userId);
+    if (user) {
+      handleDeleteClick(user);
     }
   };
-
   const handleViewDetails = async (user) => {
     setSelectedUser(user);
     try {
@@ -145,6 +165,32 @@ function UsersPage() {
     return diffMins < 30 ? 'Online' : 'Offline';
   };
 
+  // Export users to CSV
+  const exportToCSV = () => {
+    const headers = ['Name', 'Email', 'Strand', 'GWA', 'Tests Taken', 'Status', 'Last Login', 'Created At'];
+    const csvData = filteredUsers.map(user => [
+      `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      user.email || '',
+      user.strand || '',
+      user.gwa || '',
+      user.tests_taken || 0,
+      user.is_active ? 'Active' : 'Inactive',
+      user.last_login ? new Date(user.last_login).toLocaleString() : 'Never',
+      user.created_at ? new Date(user.created_at).toLocaleString() : ''
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
   return (
     <div className="page">
       <div className="page-header">
@@ -187,6 +233,9 @@ function UsersPage() {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
+        <button className="btn btn-secondary" onClick={exportToCSV} title="Export to CSV">
+          <i className="fas fa-download"></i> Export CSV
+        </button>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <i className="fas fa-plus"></i> Add User
         </button>
@@ -600,6 +649,97 @@ function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal && deleteTarget && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="delete-modal" style={{
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+            borderRadius: '16px',
+            padding: '30px',
+            maxWidth: '450px',
+            width: '90%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '70px',
+              height: '70px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              boxShadow: '0 10px 30px rgba(238, 90, 36, 0.3)'
+            }}>
+              <i className="fas fa-user-times" style={{ fontSize: '28px', color: 'white' }}></i>
+            </div>
+            <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '22px' }}>Delete User?</h3>
+            <p style={{ color: '#a0a0a0', marginBottom: '25px', lineHeight: '1.6' }}>
+              Are you sure you want to delete this user?<br />
+              <span style={{ color: '#ff6b6b', fontWeight: '500' }}>{deleteTarget.full_name}</span><br />
+              <span style={{ color: '#888', fontSize: '13px' }}>{deleteTarget.email}</span><br />
+              <small style={{ color: '#666', marginTop: '10px', display: 'block' }}>This action cannot be undone. All user data will be permanently removed.</small>
+            </p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setDeleteModal(false);
+                  setDeleteTarget(null);
+                }}
+                style={{
+                  padding: '12px 30px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
+                onMouseLeave={(e) => e.target.style.background = 'transparent'}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: '12px 30px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 15px rgba(238, 90, 36, 0.4)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+              >
+                <i className="fas fa-trash" style={{ marginRight: '8px' }}></i>
+                Delete User
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './CoursesPage.css';
+import { useToast } from '../components/Toast';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
 function CoursesPage() {
+  const toast = useToast();
   const [courses, setCoursesData] = useState([]);
   const [filteredCourses, setFilteredCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +24,10 @@ function CoursesPage() {
     strand: 'STEM',
     credits: '',
   });
+  const [editModal, setEditModal] = useState(false);
+  const [editData, setEditData] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     fetchCourses();
@@ -67,19 +73,85 @@ function CoursesPage() {
       setFormData({ course_name: '', course_code: '', description: '', strand: 'STEM', credits: '' });
       setShowModal(false);
       fetchCourses();
+      toast.success('Course added successfully!');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add course');
+      toast.error(err.response?.data?.message || 'Failed to add course');
     }
   };
 
-  const handleDeleteCourse = async (courseId) => {
-    if (!window.confirm('Are you sure?')) return;
+  // Delete course - show confirmation modal
+  const handleDeleteClick = (course) => {
+    setDeleteTarget(course);
+    setDeleteModal(true);
+  };
+
+  // Confirm delete
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await axios.delete(`${API_BASE_URL}/courses/${courseId}`);
+      await axios.delete(`${API_BASE_URL}/courses/${deleteTarget.course_id}`);
+      setDeleteModal(false);
+      setDeleteTarget(null);
       fetchCourses();
+      toast.success('Course deleted successfully!');
     } catch (err) {
-      setError('Failed to delete course');
+      toast.error('Failed to delete course');
+      setDeleteModal(false);
+      setDeleteTarget(null);
     }
+  };
+
+  // Open edit modal with course data
+  const handleEditClick = (course) => {
+    setEditData({
+      course_id: course.course_id,
+      course_name: course.course_name || '',
+      description: course.description || '',
+      required_strand: course.required_strand || 'Any',
+      minimum_gwa: course.minimum_gwa || '',
+    });
+    setEditModal(true);
+  };
+
+  // Submit edit form
+  const handleEditCourse = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${API_BASE_URL}/courses/${editData.course_id}`, {
+        course_name: editData.course_name,
+        description: editData.description,
+        required_strand: editData.required_strand,
+        minimum_gwa: editData.minimum_gwa ? parseFloat(editData.minimum_gwa) : null,
+      });
+      setEditModal(false);
+      setEditData(null);
+      fetchCourses();
+      toast.success('Course updated successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update course');
+    }
+  };
+
+  // Export courses to CSV
+  const exportToCSV = () => {
+    const headers = ['Course Name', 'Description', 'Required Strand', 'Minimum GWA'];
+    const csvData = filteredCourses.map(course => [
+      course.course_name || '',
+      course.description || '',
+      course.required_strand || 'Any',
+      course.minimum_gwa || ''
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `courses_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
   };
 
   return (
@@ -99,6 +171,9 @@ function CoursesPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="search-input"
         />
+        <button className="btn btn-secondary" onClick={exportToCSV} title="Export to CSV">
+          <i className="fas fa-download"></i> Export CSV
+        </button>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <i className="fas fa-plus"></i> Add Course
         </button>
@@ -160,8 +235,8 @@ function CoursesPage() {
                   <td><span className="badge">{course.required_strand || 'Any'}</span></td>
                   <td>{course.minimum_gwa || 'N/A'}</td>
                   <td className="actions">
-                    <button className="btn btn-sm btn-secondary"><i className="fas fa-edit"></i></button>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCourse(course.course_id)}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => handleEditClick(course)} title="Edit course"><i className="fas fa-edit"></i></button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteClick(course)} title="Delete course">
                       <i className="fas fa-trash"></i>
                     </button>
                   </td>
@@ -188,8 +263,8 @@ function CoursesPage() {
                 </div>
               </div>
               <div className="course-card-footer">
-                <button className="btn btn-sm btn-secondary"><i className="fas fa-edit"></i> Edit</button>
-                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCourse(course.course_id)}>
+                <button className="btn btn-sm btn-secondary" onClick={() => handleEditClick(course)}><i className="fas fa-edit"></i> Edit</button>
+                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteClick(course)}>
                   <i className="fas fa-trash"></i> Delete
                 </button>
               </div>
@@ -272,6 +347,110 @@ function CoursesPage() {
                 <button type="submit" className="btn btn-primary">Add Course</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Course Modal */}
+      {editModal && editData && (
+        <div className="modal-overlay" onClick={() => setEditModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><i className="fas fa-edit"></i> Edit Course</h2>
+              <button className="close-btn" onClick={() => setEditModal(false)}><i className="fas fa-times"></i></button>
+            </div>
+            <form onSubmit={handleEditCourse}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>Course Name</label>
+                  <input 
+                    type="text" 
+                    value={editData.course_name} 
+                    onChange={(e) => setEditData({ ...editData, course_name: e.target.value })} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Required Strand</label>
+                  <select 
+                    value={editData.required_strand} 
+                    onChange={(e) => setEditData({ ...editData, required_strand: e.target.value })}
+                  >
+                    <option value="Any">Any</option>
+                    <option value="STEM">STEM</option>
+                    <option value="HUMSS">HUMSS</option>
+                    <option value="ABM">ABM</option>
+                    <option value="TVL">TVL</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Minimum GWA</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={editData.minimum_gwa} 
+                    onChange={(e) => setEditData({ ...editData, minimum_gwa: e.target.value })} 
+                    placeholder="e.g., 85.00"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea 
+                    value={editData.description} 
+                    onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                    rows="4"
+                  ></textarea>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary"><i className="fas fa-save"></i> Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal && deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteModal(false)}>
+          <div className="modal delete-modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: '450px', textAlign: 'center'}}>
+            <div className="modal-header" style={{background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', borderBottom: '2px solid #7f1d1d'}}>
+              <h2 style={{color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'}}>
+                <i className="fas fa-exclamation-triangle"></i> Confirm Delete
+              </h2>
+            </div>
+            <div className="modal-body" style={{padding: '30px 25px'}}>
+              <div style={{fontSize: '48px', color: '#dc2626', marginBottom: '15px'}}>
+                <i className="fas fa-trash-alt"></i>
+              </div>
+              <h3 style={{color: '#e2e8f0', marginBottom: '10px', fontSize: '18px'}}>
+                Delete "{deleteTarget.course_name}"?
+              </h3>
+              <p style={{color: '#94a3b8', fontSize: '14px', lineHeight: '1.6'}}>
+                This action cannot be undone. This will permanently delete the course from the system.
+              </p>
+            </div>
+            <div className="modal-footer" style={{justifyContent: 'center', gap: '15px', padding: '20px 25px', borderTop: '1px solid #334155'}}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setDeleteModal(false)}
+                style={{minWidth: '120px', padding: '12px 24px'}}
+              >
+                <i className="fas fa-times"></i> Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={confirmDelete}
+                style={{minWidth: '120px', padding: '12px 24px', background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'}}
+              >
+                <i className="fas fa-trash"></i> Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

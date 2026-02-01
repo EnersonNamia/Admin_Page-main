@@ -19,11 +19,22 @@ class TestCreate(BaseModel):
     description: Optional[str] = None
     test_type: Optional[str] = "adaptive"  # adaptive, assessment, etc.
 
+class TestUpdate(BaseModel):
+    test_name: Optional[str] = None
+    description: Optional[str] = None
+    test_type: Optional[str] = None
+
 class QuestionCreate(BaseModel):
     test_id: int
     question_text: str
     question_order: int
     question_type: Optional[str] = "multiple_choice"  # multiple_choice, true_false, short_answer
+    category: Optional[str] = None
+
+class QuestionUpdate(BaseModel):
+    question_text: Optional[str] = None
+    question_order: Optional[int] = None
+    question_type: Optional[str] = None
     category: Optional[str] = None
 
 class OptionCreate(BaseModel):
@@ -141,6 +152,49 @@ async def delete_test(test_id: int):
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to delete test: {str(error)}")
+
+# Update test
+@router.put("/{test_id}")
+async def update_test(test_id: int, test: TestUpdate):
+    try:
+        # Check if test exists
+        existing = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
+        if not existing:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        # Build dynamic update query
+        updates = []
+        values = []
+        param_count = 1
+        
+        if test.test_name is not None:
+            updates.append(f"test_name = ${param_count}")
+            values.append(test.test_name)
+            param_count += 1
+        
+        if test.description is not None:
+            updates.append(f"description = ${param_count}")
+            values.append(test.description)
+            param_count += 1
+            
+        if test.test_type is not None:
+            updates.append(f"test_type = ${param_count}")
+            values.append(test.test_type)
+            param_count += 1
+        
+        if not updates:
+            return {"message": "No fields to update"}
+        
+        values.append(test_id)
+        query = f"UPDATE tests SET {', '.join(updates)} WHERE test_id = ${param_count}"
+        
+        execute_query(query, values, fetch=False)
+        
+        return {"message": "Test updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to update test: {str(error)}")
 
 # Get test attempts for a specific test
 @router.get("/{test_id}/attempts")
@@ -360,6 +414,54 @@ async def delete_question(question_id: int):
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to delete question: {str(error)}")
+
+# Update question
+@router.put("/questions/{question_id}")
+async def update_question(question_id: int, question: QuestionUpdate):
+    try:
+        # Check if question exists
+        existing = execute_query_one('SELECT question_id FROM questions WHERE question_id = $1', [question_id])
+        if not existing:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Build dynamic update query
+        updates = []
+        values = []
+        param_count = 1
+        
+        if question.question_text is not None:
+            updates.append(f"question_text = ${param_count}")
+            values.append(question.question_text)
+            param_count += 1
+        
+        if question.question_order is not None:
+            updates.append(f"question_order = ${param_count}")
+            values.append(question.question_order)
+            param_count += 1
+            
+        if question.question_type is not None:
+            updates.append(f"question_type = ${param_count}")
+            values.append(question.question_type)
+            param_count += 1
+            
+        if question.category is not None:
+            updates.append(f"category = ${param_count}")
+            values.append(question.category)
+            param_count += 1
+        
+        if not updates:
+            return {"message": "No fields to update"}
+        
+        values.append(question_id)
+        query = f"UPDATE questions SET {', '.join(updates)} WHERE question_id = ${param_count}"
+        
+        execute_query(query, values, fetch=False)
+        
+        return {"message": "Question updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to update question: {str(error)}")
 
 # Create option for a question
 @router.post("/questions/{question_id}/options", status_code=201)

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './QuestionsPage.css';
+import { useToast } from '../components/Toast';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
 function QuestionsPage() {
+  const toast = useToast();
   const [questions, setQuestionsData] = useState([]);
   const [filteredQuestions, setFilteredQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +17,10 @@ function QuestionsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editModal, setEditModal] = useState(false);
+  const [editData, setEditData] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
@@ -210,9 +216,11 @@ function QuestionsPage() {
       setShowModal(false);
       setError('');
       fetchQuestions();
+      toast.success('Question created successfully!');
     } catch (err) {
       const errorMsg = err.response?.data?.detail || err.response?.data?.message || err.message || 'Failed to add question';
       setError(errorMsg);
+      toast.error(errorMsg);
       console.error('Error adding question:', err);
     }
   };
@@ -225,6 +233,58 @@ function QuestionsPage() {
       setShowDetailModal(false);
     } catch (err) {
       setError('Failed to delete question');
+    }
+  };
+
+  // Open delete confirmation modal
+  const handleDeleteClick = (question) => {
+    setDeleteTarget(question);
+    setDeleteModal(true);
+  };
+
+  // Confirm delete
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/tests/questions/${deleteTarget.question_id}`);
+      setDeleteModal(false);
+      setDeleteTarget(null);
+      setShowDetailModal(false);
+      fetchQuestions();
+      toast.success('Question deleted successfully!');
+    } catch (err) {
+      toast.error('Failed to delete question');
+      setDeleteModal(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  // Open edit modal
+  const handleEditClick = (question) => {
+    setEditData({
+      question_id: question.question_id,
+      question_text: question.question_text || '',
+      question_type: question.question_type || 'multiple_choice',
+      question_order: question.question_order || 1,
+    });
+    setEditModal(true);
+  };
+
+  // Submit edit
+  const handleEditQuestion = async () => {
+    if (!editData) return;
+    try {
+      await axios.put(`${API_BASE_URL}/tests/questions/${editData.question_id}`, {
+        question_text: editData.question_text,
+        question_type: editData.question_type,
+        question_order: editData.question_order,
+      });
+      setEditModal(false);
+      setEditData(null);
+      fetchQuestions();
+      toast.success('Question updated successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update question');
     }
   };
 
@@ -436,9 +496,17 @@ function QuestionsPage() {
                     >
                       <i className="fas fa-eye"></i>
                     </button>
+                    <button 
+                      className="btn btn-sm btn-warning"
+                      onClick={() => handleEditClick(question)}
+                      title="Edit Question"
+                    >
+                      <i className="fas fa-edit"></i>
+                    </button>
                     <button
                       className="btn btn-sm btn-danger"
-                      onClick={() => handleDeleteQuestion(question.question_id)}
+                      onClick={() => handleDeleteClick(question)}
+                      title="Delete Question"
                     >
                       <i className="fas fa-trash"></i>
                     </button>
@@ -470,9 +538,15 @@ function QuestionsPage() {
                 >
                   <i className="fas fa-eye"></i> View
                 </button>
+                <button 
+                  className="btn btn-sm btn-warning"
+                  onClick={() => handleEditClick(question)}
+                >
+                  <i className="fas fa-edit"></i> Edit
+                </button>
                 <button
                   className="btn btn-sm btn-danger"
-                  onClick={() => handleDeleteQuestion(question.question_id)}
+                  onClick={() => handleDeleteClick(question)}
                 >
                   <i className="fas fa-trash"></i> Delete
                 </button>
@@ -910,6 +984,258 @@ function QuestionsPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal && deleteTarget && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="delete-modal" style={{
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+            borderRadius: '16px',
+            padding: '30px',
+            maxWidth: '450px',
+            width: '90%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '70px',
+              height: '70px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              boxShadow: '0 10px 30px rgba(238, 90, 36, 0.3)'
+            }}>
+              <i className="fas fa-exclamation-triangle" style={{ fontSize: '30px', color: 'white' }}></i>
+            </div>
+            <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '22px' }}>Delete Question?</h3>
+            <p style={{ color: '#a0a0a0', marginBottom: '25px', lineHeight: '1.6' }}>
+              Are you sure you want to delete this question?<br />
+              <span style={{ color: '#ff6b6b', fontWeight: '500' }}>"{deleteTarget.question_text?.substring(0, 50)}..."</span><br />
+              <small style={{ color: '#888' }}>This action cannot be undone.</small>
+            </p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setDeleteModal(false);
+                  setDeleteTarget(null);
+                }}
+                style={{
+                  padding: '12px 30px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
+                onMouseLeave={(e) => e.target.style.background = 'transparent'}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: '12px 30px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 15px rgba(238, 90, 36, 0.4)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+              >
+                <i className="fas fa-trash" style={{ marginRight: '8px' }}></i>
+                Delete Question
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Question Modal */}
+      {editModal && editData && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="edit-modal" style={{
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+            borderRadius: '16px',
+            padding: '30px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+              <h3 style={{ color: '#fff', margin: 0, fontSize: '22px' }}>
+                <i className="fas fa-edit" style={{ marginRight: '10px', color: '#4CAF50' }}></i>
+                Edit Question
+              </h3>
+              <button
+                onClick={() => {
+                  setEditModal(false);
+                  setEditData(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#a0a0a0',
+                  cursor: 'pointer',
+                  fontSize: '20px'
+                }}
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleEditQuestion();
+            }}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
+                  Question Text
+                </label>
+                <textarea
+                  value={editData.question_text || ''}
+                  onChange={(e) => setEditData({ ...editData, question_text: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: '#fff',
+                    fontSize: '14px',
+                    minHeight: '100px',
+                    resize: 'vertical'
+                  }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
+                    Question Type
+                  </label>
+                  <select
+                    value={editData.question_type || 'multiple_choice'}
+                    onChange={(e) => setEditData({ ...editData, question_type: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: '#fff',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="multiple_choice" style={{ background: '#1a1a2e' }}>Multiple Choice</option>
+                    <option value="likert" style={{ background: '#1a1a2e' }}>Likert Scale</option>
+                    <option value="true_false" style={{ background: '#1a1a2e' }}>True/False</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
+                    Question Order
+                  </label>
+                  <input
+                    type="number"
+                    value={editData.question_order || 1}
+                    onChange={(e) => setEditData({ ...editData, question_order: parseInt(e.target.value) })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: '#fff',
+                      fontSize: '14px'
+                    }}
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', marginTop: '25px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModal(false);
+                    setEditData(null);
+                  }}
+                  style={{
+                    padding: '12px 25px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    background: 'transparent',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '12px 25px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    boxShadow: '0 4px 15px rgba(76, 175, 80, 0.4)'
+                  }}
+                >
+                  <i className="fas fa-save" style={{ marginRight: '8px' }}></i>
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

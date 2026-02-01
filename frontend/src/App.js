@@ -16,6 +16,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 
 // Components
 import Navigation from './components/Navigation';
+import { ToastContainer } from './components/Toast';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -68,31 +69,33 @@ function App() {
   }
 
   return (
-    <Router>
-      {isAuthenticated ? (
-        <div className="app-container">
-          <Navigation admin={admin} onLogout={handleLogout} />
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/courses" element={<CoursesPage />} />
-              <Route path="/tests" element={<TestsPage />} />
-              <Route path="/questions" element={<QuestionsPage />} />
-              <Route path="/recommendations" element={<RecommendationsPage />} />
-              <Route path="/feedback" element={<FeedbackPage />} />
-              <Route path="/analytics" element={<AnalyticsPage />} />
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
-          </main>
-        </div>
-      ) : (
-        <Routes>
-          <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-          <Route path="*" element={<Navigate to="/login" />} />
-        </Routes>
-      )}
-    </Router>
+    <ToastContainer>
+      <Router>
+        {isAuthenticated ? (
+          <div className="app-container">
+            <Navigation admin={admin} onLogout={handleLogout} />
+            <main className="main-content">
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/courses" element={<CoursesPage />} />
+                <Route path="/tests" element={<TestsPage />} />
+                <Route path="/questions" element={<QuestionsPage />} />
+                <Route path="/recommendations" element={<RecommendationsPage />} />
+                <Route path="/feedback" element={<FeedbackPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </main>
+          </div>
+        ) : (
+          <Routes>
+            <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+            <Route path="*" element={<Navigate to="/login" />} />
+          </Routes>
+        )}
+      </Router>
+    </ToastContainer>
   );
 }
 

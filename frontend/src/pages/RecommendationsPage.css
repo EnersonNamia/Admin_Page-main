@@ -1032,6 +1032,23 @@
 /* Export Modal Styles */
 .export-modal {
   max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.export-modal .modal-body {
+  overflow-y: auto;
+  max-height: calc(90vh - 140px);
+  padding: 20px;
+}
+
+.export-modal .modal-footer {
+  flex-shrink: 0;
+  border-top: 1px solid #334155;
+  padding: 15px 20px;
+  background: #1e293b;
+  border-radius: 0 0 12px 12px;
 }
 
 .export-summary h3 {

@@ -342,6 +342,8 @@ tbody tr:hover {
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  padding: 20px;
+  overflow-y: auto;
 }
 
 .modal {
@@ -349,6 +351,8 @@ tbody tr:hover {
   border-radius: var(--radius);
   max-width: 500px;
   width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border-color);
 }
