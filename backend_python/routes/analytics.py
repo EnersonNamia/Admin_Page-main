@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from models.database import execute_query, execute_query_one
 from datetime import datetime, timedelta
 
@@ -387,3 +388,124 @@ async def export_analytics_data():
         }
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to export analytics data: {str(error)}")
+
+
+# PDF Report Generation Endpoint
+@router.get("/export/pdf")
+async def export_analytics_pdf():
+    """Generate and download a PDF analytics report"""
+    try:
+        from services.pdf_service import pdf_generator
+        
+        # Gather all analytics data
+        total_users = execute_query_one('SELECT COUNT(*) as count FROM users')
+        active_users = execute_query_one("SELECT COUNT(*) as count FROM users WHERE is_active = true")
+        total_courses = execute_query_one('SELECT COUNT(*) as count FROM courses')
+        total_tests = execute_query_one('SELECT COUNT(*) as count FROM tests')
+        total_questions = execute_query_one('SELECT COUNT(*) as count FROM questions')
+        total_attempts = execute_query_one('SELECT COUNT(*) as count FROM user_test_attempts')
+        total_recommendations = execute_query_one('SELECT COUNT(*) as count FROM recommendations')
+        
+        # Strand distribution from academic_info JSON field
+        strand_dist = execute_query("""
+            SELECT 
+                COALESCE(academic_info->>'strand', 'Unknown') as strand, 
+                COUNT(*) as count 
+            FROM users 
+            GROUP BY academic_info->>'strand'
+        """)
+        strand_distribution = {row['strand'] or 'Unknown': row['count'] for row in strand_dist} if strand_dist else {}
+        
+        # Feedback stats - using correct table name
+        feedback_stats_raw = execute_query_one("""
+            SELECT 
+                COUNT(*) as total,
+                COALESCE(AVG(rating), 0) as average_rating,
+                COUNT(CASE WHEN rating >= 4 THEN 1 END) as positive,
+                COUNT(CASE WHEN rating = 3 THEN 1 END) as neutral,
+                COUNT(CASE WHEN rating <= 2 THEN 1 END) as negative
+            FROM recommendation_feedback
+        """)
+        
+        # Recommendation status
+        rec_stats = execute_query_one("""
+            SELECT 
+                COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+                COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
+                COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+            FROM recommendations
+        """)
+        
+        # Build data for PDF
+        report_data = {
+            'total_users': int(total_users['count']) if total_users else 0,
+            'active_users': int(active_users['count']) if active_users else 0,
+            'total_courses': int(total_courses['count']) if total_courses else 0,
+            'total_tests': int(total_tests['count']) if total_tests else 0,
+            'total_questions': int(total_questions['count']) if total_questions else 0,
+            'total_attempts': int(total_attempts['count']) if total_attempts else 0,
+            'total_recommendations': int(total_recommendations['count']) if total_recommendations else 0,
+            'strand_distribution': strand_distribution,
+            'feedback_stats': {
+                'total': int(feedback_stats_raw['total']) if feedback_stats_raw else 0,
+                'average_rating': float(feedback_stats_raw['average_rating']) if feedback_stats_raw else 0,
+                'positive': int(feedback_stats_raw['positive']) if feedback_stats_raw else 0,
+                'neutral': int(feedback_stats_raw['neutral']) if feedback_stats_raw else 0,
+                'negative': int(feedback_stats_raw['negative']) if feedback_stats_raw else 0,
+            },
+            'recommendation_stats': {
+                'pending': int(rec_stats['pending']) if rec_stats else 0,
+                'approved': int(rec_stats['approved']) if rec_stats else 0,
+                'rejected': int(rec_stats['rejected']) if rec_stats else 0,
+                'completed': int(rec_stats['completed']) if rec_stats else 0,
+            }
+        }
+        
+        # Generate PDF
+        pdf_buffer = pdf_generator.generate_analytics_report(report_data)
+        
+        filename = f"analytics_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {str(error)}")
+
+
+# Users PDF Report
+@router.get("/export/users-pdf")
+async def export_users_pdf():
+    """Generate and download a PDF users report"""
+    try:
+        from services.pdf_service import pdf_generator
+        
+        users = execute_query("""
+            SELECT user_id, 
+                   CONCAT(first_name, ' ', last_name) as full_name, 
+                   email, 
+                   academic_info->>'strand' as strand, 
+                   academic_info->>'gwa' as gwa, 
+                   is_active, 
+                   created_at
+            FROM users
+            ORDER BY created_at DESC
+            LIMIT 100
+        """)
+        
+        pdf_buffer = pdf_generator.generate_users_report(users or [])
+        
+        filename = f"users_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to generate users PDF: {str(error)}")

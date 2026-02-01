@@ -67,11 +67,36 @@ function AnalyticsPage() {
   const testsPercent = total > 0 ? (analytics.tests / total) * 100 : 25;
   const recsPercent = total > 0 ? (analytics.recommendations / total) * 100 : 25;
 
+  // Export to PDF
+  const exportToPDF = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/analytics/export/pdf`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `analytics_report_${new Date().toISOString().split('T')[0]}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      alert('Failed to export PDF report');
+    }
+  };
+
   return (
     <div className="page analytics-page">
       <div className="page-header">
-        <h1><i className="fas fa-chart-bar"></i> Analytics Dashboard</h1>
-        <p>System performance and statistics overview</p>
+        <div>
+          <h1><i className="fas fa-chart-bar"></i> Analytics Dashboard</h1>
+          <p>System performance and statistics overview</p>
+        </div>
+        <button className="btn btn-primary" onClick={exportToPDF} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <i className="fas fa-file-pdf"></i> Export PDF Report
+        </button>
       </div>
 
       {loading ? (

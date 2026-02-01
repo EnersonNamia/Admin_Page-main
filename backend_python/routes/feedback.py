@@ -64,6 +64,23 @@ async def submit_feedback(feedback: FeedbackSubmission):
             RETURNING feedback_id, rating, feedback_text, created_at
         """, [feedback.recommendation_id, feedback.user_id, feedback.rating, feedback.feedback_text or ""])
         
+        # Send email notification to admin
+        try:
+            from services.email_service import email_service
+            feedback_data = {
+                'user_id': feedback.user_id,
+                'recommendation_id': feedback.recommendation_id,
+                'rating': feedback.rating,
+                'comment': feedback.feedback_text
+            }
+            # Send low rating alert for ratings 1-2
+            if feedback.rating <= 2:
+                email_service.notify_low_rating_feedback(feedback_data)
+            else:
+                email_service.notify_new_feedback(feedback_data)
+        except Exception as email_error:
+            print(f"[EMAIL] Notification failed: {str(email_error)}")
+        
         return {
             "success": True,
             "message": "Feedback submitted successfully",
