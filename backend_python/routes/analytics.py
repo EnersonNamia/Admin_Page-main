@@ -509,3 +509,101 @@ async def export_users_pdf():
         
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to generate users PDF: {str(error)}")
+
+
+# ============================================================
+# DAILY DIGEST EMAIL
+# ============================================================
+@router.post("/send-daily-digest")
+async def send_daily_digest_email():
+    """Send a daily digest email with system statistics"""
+    try:
+        from services.email_service import email_service
+        
+        # Gather stats for today
+        today = datetime.now().date()
+        
+        # Total users
+        total_users = execute_query_one('SELECT COUNT(*) as count FROM users')
+        
+        # New users today
+        new_users_today = execute_query_one("""
+            SELECT COUNT(*) as count FROM users 
+            WHERE DATE(created_at) = CURRENT_DATE
+        """)
+        
+        # Total feedback
+        total_feedback = execute_query_one('SELECT COUNT(*) as count FROM recommendation_feedback')
+        
+        # Feedback today
+        feedback_today = execute_query_one("""
+            SELECT COUNT(*) as count FROM recommendation_feedback 
+            WHERE DATE(created_at) = CURRENT_DATE
+        """)
+        
+        # Average rating
+        avg_rating = execute_query_one('SELECT COALESCE(AVG(rating), 0) as avg FROM recommendation_feedback')
+        
+        # Low ratings today (1-2 stars)
+        low_ratings_today = execute_query_one("""
+            SELECT COUNT(*) as count FROM recommendation_feedback 
+            WHERE rating <= 2 AND DATE(created_at) = CURRENT_DATE
+        """)
+        
+        # Total assessments
+        total_assessments = execute_query_one('SELECT COUNT(*) as count FROM user_test_attempts')
+        
+        # Assessments today
+        assessments_today = execute_query_one("""
+            SELECT COUNT(*) as count FROM user_test_attempts 
+            WHERE DATE(created_at) = CURRENT_DATE
+        """)
+        
+        # Build stats dict
+        stats = {
+            'total_users': int(total_users['count']) if total_users else 0,
+            'new_users_today': int(new_users_today['count']) if new_users_today else 0,
+            'total_feedback': int(total_feedback['count']) if total_feedback else 0,
+            'feedback_today': int(feedback_today['count']) if feedback_today else 0,
+            'average_rating': float(avg_rating['avg']) if avg_rating else 0,
+            'low_ratings_today': int(low_ratings_today['count']) if low_ratings_today else 0,
+            'total_assessments': int(total_assessments['count']) if total_assessments else 0,
+            'assessments_today': int(assessments_today['count']) if assessments_today else 0,
+        }
+        
+        # Send digest email
+        success = email_service.send_daily_digest(stats)
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Daily digest email sent successfully",
+                "stats": stats
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Email service is disabled or failed to send",
+                "stats": stats
+            }
+            
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to send daily digest: {str(error)}")
+
+
+@router.get("/email-status")
+async def get_email_status():
+    """Check if email notifications are enabled"""
+    try:
+        from services.email_service import email_service
+        
+        return {
+            "enabled": email_service.enabled,
+            "admin_email": email_service.admin_email if email_service.enabled else None,
+            "smtp_configured": bool(email_service.smtp_user and email_service.smtp_password)
+        }
+    except Exception as error:
+        return {
+            "enabled": False,
+            "error": str(error)
+        }

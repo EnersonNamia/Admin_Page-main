@@ -87,6 +87,25 @@ function AnalyticsPage() {
     }
   };
 
+  // Send Daily Digest Email
+  const [sendingDigest, setSendingDigest] = useState(false);
+  const sendDailyDigest = async () => {
+    try {
+      setSendingDigest(true);
+      const response = await axios.post(`${API_BASE_URL}/analytics/send-daily-digest`);
+      if (response.data.success) {
+        alert('✅ Daily digest email sent successfully!\n\nCheck your inbox for the summary.');
+      } else {
+        alert('⚠️ ' + (response.data.message || 'Email service is disabled'));
+      }
+    } catch (err) {
+      console.error('Failed to send daily digest:', err);
+      alert('❌ Failed to send daily digest email. Check email configuration.');
+    } finally {
+      setSendingDigest(false);
+    }
+  };
+
   return (
     <div className="page analytics-page">
       <div className="page-header">
@@ -94,9 +113,20 @@ function AnalyticsPage() {
           <h1><i className="fas fa-chart-bar"></i> Analytics Dashboard</h1>
           <p>System performance and statistics overview</p>
         </div>
-        <button className="btn btn-primary" onClick={exportToPDF} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <i className="fas fa-file-pdf"></i> Export PDF Report
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="btn btn-secondary" 
+            onClick={sendDailyDigest} 
+            disabled={sendingDigest}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <i className={sendingDigest ? "fas fa-spinner fa-spin" : "fas fa-envelope"}></i> 
+            {sendingDigest ? 'Sending...' : 'Send Daily Digest'}
+          </button>
+          <button className="btn btn-primary" onClick={exportToPDF} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <i className="fas fa-file-pdf"></i> Export PDF Report
+          </button>
+        </div>
       </div>
 
       {loading ? (
