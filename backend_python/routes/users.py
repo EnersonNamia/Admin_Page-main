@@ -49,8 +49,8 @@ async def get_users(
             created_at,
             is_active,
             last_active as last_login,
-            (SELECT COUNT(*) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as tests_taken,
-            (SELECT MAX(attempt_date) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as last_test_date
+            (SELECT COUNT(*) FROM test_attempts ta WHERE ta.user_id = users.user_id) as tests_taken,
+            (SELECT MAX(taken_at) FROM test_attempts ta WHERE ta.user_id = users.user_id) as last_test_date
         FROM users WHERE 1=1"""
         
         count_query = "SELECT COUNT(*) as total FROM users WHERE 1=1"
@@ -111,8 +111,8 @@ async def get_user(user_id: int):
                 academic_info,
                 created_at,
                 last_active as last_login,
-                (SELECT COUNT(*) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as tests_taken,
-                (SELECT MAX(attempt_date) FROM user_test_attempts uta WHERE uta.user_id = users.user_id) as last_test_date
+                (SELECT COUNT(*) FROM test_attempts ta WHERE ta.user_id = users.user_id) as tests_taken,
+                (SELECT MAX(taken_at) FROM test_attempts ta WHERE ta.user_id = users.user_id) as last_test_date
             FROM users WHERE user_id = $1""",
             [user_id]
         )
@@ -299,7 +299,7 @@ async def get_user_test_history(user_id: int):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Get test history from test_attempts table joined with user_test_attempts for new columns
+        # Get test history from test_attempts table
         test_history = execute_query("""
             SELECT 
                 ta.attempt_id,
@@ -308,13 +308,12 @@ async def get_user_test_history(user_id: int):
                 t.description,
                 t.test_type,
                 ta.taken_at as attempt_date,
-                COALESCE(uta.max_questions, uta.total_questions, 
+                COALESCE(ta.questions_answered, ta.max_questions, 
                     (SELECT COUNT(*) FROM student_answers sa WHERE sa.attempt_id = ta.attempt_id)) as questions_answered,
-                uta.confidence_score,
-                uta.traits_found as traits_count_stored
+                ta.confidence_score,
+                NULL as traits_count_stored
             FROM test_attempts ta
             JOIN tests t ON ta.test_id = t.test_id
-            LEFT JOIN user_test_attempts uta ON ta.attempt_id = uta.attempt_id
             WHERE ta.user_id = $1
             ORDER BY ta.taken_at DESC
         """, [user_id])

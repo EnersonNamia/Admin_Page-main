@@ -207,19 +207,19 @@ async def get_test_attempts(test_id: int):
         
         attempts = execute_query("""
             SELECT 
-                uta.attempt_id,
-                uta.user_id,
+                ta.attempt_id,
+                ta.user_id,
                 CONCAT(u.first_name, ' ', u.last_name) as full_name,
                 u.email,
-                uta.score,
-                uta.total_questions,
-                ROUND((uta.score::float / uta.total_questions * 100)::numeric, 2) as percentage,
-                uta.attempt_date,
-                uta.time_taken
-            FROM user_test_attempts uta
-            JOIN users u ON uta.user_id = u.user_id
-            WHERE uta.test_id = $1
-            ORDER BY uta.attempt_date DESC
+                ta.score,
+                ta.total_questions,
+                ROUND((ta.score::float / NULLIF(ta.total_questions, 0) * 100)::numeric, 2) as percentage,
+                ta.taken_at as attempt_date,
+                ta.time_taken
+            FROM test_attempts ta
+            JOIN users u ON ta.user_id = u.user_id
+            WHERE ta.test_id = $1
+            ORDER BY ta.taken_at DESC
         """, [test_id])
         
         return {

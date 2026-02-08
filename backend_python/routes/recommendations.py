@@ -955,15 +955,18 @@ async def get_recommendations_by_status(
                     u.email as user_email,
                     c.course_name,
                     c.description as course_description,
-                    uta.score as assessment_score,
-                    uta.total_questions,
-                    uta.confidence_score,
-                    uta.traits_found,
-                    uta.attempt_date as assessment_date
+                    ta.questions_answered as assessment_score,
+                    ta.questions_presented as total_questions,
+                    ta.confidence_score,
+                    (SELECT COUNT(DISTINCT o.trait_tag) 
+                     FROM student_answers sa 
+                     JOIN options o ON sa.chosen_option_id = o.option_id 
+                     WHERE sa.attempt_id = r.attempt_id AND o.trait_tag IS NOT NULL) as traits_found,
+                    ta.taken_at as assessment_date
                 FROM recommendations r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN courses c ON r.course_id = c.course_id
-                LEFT JOIN user_test_attempts uta ON r.attempt_id = uta.attempt_id
+                LEFT JOIN test_attempts ta ON r.attempt_id = ta.attempt_id
                 ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
             """
             count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE attempt_id IS NOT NULL"
@@ -978,15 +981,18 @@ async def get_recommendations_by_status(
                     u.email as user_email,
                     c.course_name,
                     c.description as course_description,
-                    uta.score as assessment_score,
-                    uta.total_questions,
-                    uta.confidence_score,
-                    uta.traits_found,
-                    uta.attempt_date as assessment_date
+                    ta.questions_answered as assessment_score,
+                    ta.questions_presented as total_questions,
+                    ta.confidence_score,
+                    (SELECT COUNT(DISTINCT o.trait_tag) 
+                     FROM student_answers sa 
+                     JOIN options o ON sa.chosen_option_id = o.option_id 
+                     WHERE sa.attempt_id = r.attempt_id AND o.trait_tag IS NOT NULL) as traits_found,
+                    ta.taken_at as assessment_date
                 FROM recommendations r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN courses c ON r.course_id = c.course_id
-                LEFT JOIN user_test_attempts uta ON r.attempt_id = uta.attempt_id
+                LEFT JOIN test_attempts ta ON r.attempt_id = ta.attempt_id
                 WHERE COALESCE(r.status, 'pending') = $1
                 ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
             """

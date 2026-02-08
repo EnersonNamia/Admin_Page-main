@@ -68,22 +68,22 @@ async def get_admin_analytics_overview():
         total_users = execute_query_one('SELECT COUNT(*) as count FROM users')
         # Only count adaptive test attempts for total assessments
         total_assessments = execute_query_one("""
-            SELECT COUNT(*) as count FROM user_test_attempts uta
-            JOIN tests t ON uta.test_id = t.test_id
+            SELECT COUNT(*) as count FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.test_id
             WHERE t.test_type = 'adaptive'
         """)
         total_recommendations = execute_query_one('SELECT COUNT(*) as count FROM recommendations')
         
         # Get assessment breakdown by type
         standard_assessments = execute_query_one("""
-            SELECT COUNT(*) as count FROM user_test_attempts uta
-            JOIN tests t ON uta.test_id = t.test_id
+            SELECT COUNT(*) as count FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.test_id
             WHERE t.test_type = 'assessment'
         """)
         
         adaptive_assessments = execute_query_one("""
-            SELECT COUNT(*) as count FROM user_test_attempts uta
-            JOIN tests t ON uta.test_id = t.test_id
+            SELECT COUNT(*) as count FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.test_id
             WHERE t.test_type = 'adaptive'
         """)
         
@@ -124,9 +124,9 @@ async def get_assessments_analytics():
             SELECT 
                 t.test_type,
                 t.test_name,
-                COUNT(uta.attempt_id) as count
+                COUNT(ta.attempt_id) as count
             FROM tests t
-            LEFT JOIN user_test_attempts uta ON t.test_id = uta.test_id
+            LEFT JOIN test_attempts ta ON t.test_id = ta.test_id
             GROUP BY t.test_id, t.test_type, t.test_name
             ORDER BY count DESC
         """)
@@ -134,11 +134,11 @@ async def get_assessments_analytics():
         # Assessments by date (last 30 days)
         assessments_by_date = execute_query("""
             SELECT 
-                DATE(attempt_date) as date,
+                DATE(taken_at) as date,
                 COUNT(attempt_id) as count
-            FROM user_test_attempts
-            WHERE attempt_date >= NOW() - INTERVAL '30 days'
-            GROUP BY DATE(attempt_date)
+            FROM test_attempts
+            WHERE taken_at >= NOW() - INTERVAL '30 days'
+            GROUP BY DATE(taken_at)
             ORDER BY date ASC
         """)
         
@@ -187,9 +187,10 @@ async def get_user_assessment_history_admin(user_id: int):
         
         # Get all test attempts
         attempts = execute_query("""
-            SELECT * FROM user_test_attempts 
-            WHERE user_id = %s
-            ORDER BY attempt_date DESC
+            SELECT ta.*, t.test_name, t.test_type FROM test_attempts ta
+            JOIN tests t ON ta.test_id = t.test_id
+            WHERE ta.user_id = %s
+            ORDER BY ta.taken_at DESC
         """, [user_id])
         
         assessment_history = []
@@ -265,12 +266,12 @@ async def get_all_users_assessment_summary():
                 u.first_name,
                 u.last_name,
                 u.email,
-                COUNT(uta.attempt_id) as assessment_count,
-                MAX(uta.attempt_date) as last_assessment
+                COUNT(ta.attempt_id) as assessment_count,
+                MAX(ta.taken_at) as last_assessment
             FROM users u
-            LEFT JOIN user_test_attempts uta ON u.user_id = uta.user_id
+            LEFT JOIN test_attempts ta ON u.user_id = ta.user_id
             GROUP BY u.user_id, u.first_name, u.last_name, u.email
-            ORDER BY COUNT(uta.attempt_id) DESC
+            ORDER BY COUNT(ta.attempt_id) DESC
         """)
         
         users_summary = []
@@ -348,18 +349,18 @@ async def export_analytics_data():
     try:
         # Overview stats
         total_users = execute_query_one('SELECT COUNT(*) as count FROM users')
-        total_assessments = execute_query_one('SELECT COUNT(*) as count FROM user_test_attempts')
+        total_assessments = execute_query_one('SELECT COUNT(*) as count FROM test_attempts')
         total_recommendations = execute_query_one('SELECT COUNT(*) as count FROM recommendations')
         
         # User with most assessments
         user_with_most = execute_query_one("""
             SELECT 
                 CONCAT(u.first_name, ' ', u.last_name) as fullname,
-                COUNT(uta.attempt_id) as count
+                COUNT(ta.attempt_id) as count
             FROM users u
-            LEFT JOIN user_test_attempts uta ON u.user_id = uta.user_id
+            LEFT JOIN test_attempts ta ON u.user_id = ta.user_id
             GROUP BY u.user_id, u.first_name, u.last_name
-            ORDER BY COUNT(uta.attempt_id) DESC
+            ORDER BY COUNT(ta.attempt_id) DESC
             LIMIT 1
         """)
         
@@ -403,7 +404,7 @@ async def export_analytics_pdf():
         total_courses = execute_query_one('SELECT COUNT(*) as count FROM courses')
         total_tests = execute_query_one('SELECT COUNT(*) as count FROM tests')
         total_questions = execute_query_one('SELECT COUNT(*) as count FROM questions')
-        total_attempts = execute_query_one('SELECT COUNT(*) as count FROM user_test_attempts')
+        total_attempts = execute_query_one('SELECT COUNT(*) as count FROM test_attempts')
         total_recommendations = execute_query_one('SELECT COUNT(*) as count FROM recommendations')
         
         # Strand distribution from academic_info JSON field
@@ -551,12 +552,12 @@ async def send_daily_digest_email():
         """)
         
         # Total assessments
-        total_assessments = execute_query_one('SELECT COUNT(*) as count FROM user_test_attempts')
+        total_assessments = execute_query_one('SELECT COUNT(*) as count FROM test_attempts')
         
         # Assessments today
         assessments_today = execute_query_one("""
-            SELECT COUNT(*) as count FROM user_test_attempts 
-            WHERE DATE(created_at) = CURRENT_DATE
+            SELECT COUNT(*) as count FROM test_attempts 
+            WHERE DATE(taken_at) = CURRENT_DATE
         """)
         
         # Build stats dict
