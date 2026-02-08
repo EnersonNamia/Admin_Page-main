@@ -159,17 +159,30 @@ function QuestionsPage() {
     try {
       setError('');
       
-      // Validate that at least one option has text
-      const filledOptions = options.filter(o => o.text.trim());
-      if (filledOptions.length === 0) {
-        setError('Please add at least one option');
+      // Validate that category is selected
+      if (!formData.category || !formData.category.trim()) {
+        setError('Please select a question category');
         return;
       }
 
-      // Find Smart Assessment (Adaptive) test ID
-      const smartAssessmentTest = tests.find(t => t.test_name === 'Smart Assessment (Adaptive)');
+      // Validate that all 4 options have text
+      const filledOptions = options.filter(o => o.text.trim());
+      if (filledOptions.length < 4) {
+        setError('Please fill in all 4 options');
+        return;
+      }
+
+      // Validate that all filled options have traits
+      const optionsWithoutTraits = filledOptions.filter(o => !o.trait || !o.trait.trim());
+      if (optionsWithoutTraits.length > 0) {
+        setError('Please assign a trait to each option');
+        return;
+      }
+
+      // Find Adaptive Assessment test ID
+      const smartAssessmentTest = tests.find(t => t.test_name === 'Adaptive Assessment');
       if (!smartAssessmentTest) {
-        setError('Smart Assessment (Adaptive) test not found');
+        setError('Adaptive Assessment test not found');
         return;
       }
 
@@ -660,16 +673,16 @@ function QuestionsPage() {
                 )}
 
                 <div className="form-group" style={{marginBottom: '25px'}}>
-                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px'}}>Smart Assessment (Adaptive)</label>
+                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px'}}>Adaptive Assessment</label>
                   <input
                     type="text"
-                    value="Smart Assessment (Adaptive)"
+                    value="Adaptive Assessment"
                     disabled
                     style={{opacity: 0.6, padding: '12px', background: '#FAF5F0', border: '1px solid #E8D5C4', borderRadius: '6px', color: '#5A4A3A'}}
                   />
                   <input
                     type="hidden"
-                    value={tests.find(t => t.test_name === 'Smart Assessment (Adaptive)')?.test_id || ''}
+                    value={tests.find(t => t.test_name === 'Adaptive Assessment')?.test_id || ''}
                     onChange={(e) => setFormData({ ...formData, test_id: parseInt(e.target.value) })}
                   />
                 </div>

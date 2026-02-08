@@ -14,19 +14,13 @@ function UsersPage() {
   const [search, setSearch] = useState('');
   const [strandFilter, setStrandFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'inactive'
-  const [showModal, setShowModal] = useState(false);
+
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userTestHistory, setUserTestHistory] = useState([]);
   const [expandedAttempt, setExpandedAttempt] = useState(null);
-  const [formData, setFormData] = useState({
-    full_name: '',
-    email: '',
-    strand: 'STEM',
-    gwa: '',
-  });
 
   useEffect(() => {
     fetchUsers();
@@ -71,18 +65,7 @@ function UsersPage() {
     setFilteredUsers(filtered);
   };
 
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${API_BASE_URL}/users`, formData);
-      setFormData({ full_name: '', email: '', strand: 'STEM', gwa: '' });
-      setShowModal(false);
-      fetchUsers();
-      toast.success('User added successfully!');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to add user');
-    }
-  };
+
 
   const handleDeleteClick = (user) => {
     setDeleteTarget(user);
@@ -236,9 +219,6 @@ function UsersPage() {
         <button className="btn btn-secondary" onClick={exportToCSV} title="Export to CSV">
           <i className="fas fa-download"></i> Export CSV
         </button>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <i className="fas fa-plus"></i> Add User
-        </button>
       </div>
 
       {loading ? (
@@ -281,9 +261,6 @@ function UsersPage() {
                       title="View details"
                     >
                       <i className="fas fa-eye"></i>
-                    </button>
-                    <button className="btn btn-sm btn-secondary">
-                      <i className="fas fa-edit"></i>
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
@@ -586,72 +563,7 @@ function UsersPage() {
         </div>
       )}
 
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2><i className="fas fa-user-plus"></i> Add New User</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <form onSubmit={handleAddUser}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>Full Name</label>
-                  <input
-                    type="text"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Strand</label>
-                  <select
-                    value={formData.strand}
-                    onChange={(e) => setFormData({ ...formData, strand: e.target.value })}
-                  >
-                    <option value="STEM">STEM</option>
-                    <option value="HUMSS">HUMSS</option>
-                    <option value="ABM">ABM</option>
-                    <option value="TVL">TVL</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>GWA (General Weighted Average)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={formData.gwa}
-                    onChange={(e) => setFormData({ ...formData, gwa: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Add User
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* Delete Confirmation Modal */}
       {deleteModal && deleteTarget && (
