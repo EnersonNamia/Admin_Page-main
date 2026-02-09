@@ -111,12 +111,6 @@ function LoginPage({ onLogin }) {
               )}
             </button>
           </form>
-
-          <div className="login-footer">
-            <p>Demo Credentials:</p>
-            <code>Email: admin@system.com</code>
-            <code>Password: admin123</code>
-          </div>
         </div>
       </div>
     </div>
