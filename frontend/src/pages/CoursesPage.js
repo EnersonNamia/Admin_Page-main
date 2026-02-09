@@ -287,7 +287,7 @@ function CoursesPage() {
       course.course_name || '',
       course.description || '',
       course.trait_tag || '',
-      course.required_strand || 'Any',
+      course.required_strand || 'ANY',
       course.minimum_gwa || ''
     ]);
     
@@ -383,7 +383,7 @@ function CoursesPage() {
                   <td><strong>{course.course_name}</strong></td>
                   <td style={{maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={course.description}>{course.description || 'N/A'}</td>
                   <td style={{maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={course.trait_tag}>{course.trait_tag || 'N/A'}</td>
-                  <td><span className="badge">{course.required_strand || 'Any'}</span></td>
+                  <td><span className="badge">{course.required_strand || 'ANY'}</span></td>
                   <td>{course.minimum_gwa || 'N/A'}</td>
                   <td className="actions">
                     <button className="btn btn-sm btn-secondary" onClick={() => handleEditClick(course)} title="Edit course"><i className="fas fa-edit"></i></button>
@@ -402,7 +402,7 @@ function CoursesPage() {
             <div key={course.course_id} className="course-card">
               <div className="course-card-header">
                 <h3>{course.course_name}</h3>
-                <span className="badge">{course.required_strand || 'Any'}</span>
+                <span className="badge">{course.required_strand || 'ANY'}</span>
               </div>
               <div className="course-card-body">
                 <p className="description">{course.description || 'No description'}</p>

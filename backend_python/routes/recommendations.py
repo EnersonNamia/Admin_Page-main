@@ -86,7 +86,7 @@ async def generate_recommendations(request: GenerateRequest = None):
                     LIMIT 1
                 ) as latest_attempts
             FROM users u
-            WHERE u.is_active = true AND u.role = 'student'
+            WHERE COALESCE(u.is_active, 1) = 1 AND u.role = 'student'
         """
         student_params = []
         

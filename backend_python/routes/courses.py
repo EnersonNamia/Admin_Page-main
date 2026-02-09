@@ -109,8 +109,10 @@ async def create_course(course: CourseCreate):
 @router.put("/{course_id}")
 async def update_course(course_id: int, course: CourseUpdate):
     try:
+        # Build dynamic update query - required_strand should be set directly (including null for "Any Strand")
+        # Other fields use COALESCE to keep existing value if not provided
         result = execute_query(
-            'UPDATE courses SET course_name = COALESCE($1, course_name), description = COALESCE($2, description), required_strand = COALESCE($3, required_strand), minimum_gwa = COALESCE($4, minimum_gwa), trait_tag = COALESCE($5, trait_tag) WHERE course_id = $6',
+            'UPDATE courses SET course_name = COALESCE($1, course_name), description = COALESCE($2, description), required_strand = $3, minimum_gwa = COALESCE($4, minimum_gwa), trait_tag = COALESCE($5, trait_tag) WHERE course_id = $6',
             [course.course_name, course.description, course.required_strand, course.minimum_gwa, course.trait_tag, course_id],
             fetch=False
         )

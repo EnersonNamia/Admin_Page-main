@@ -413,7 +413,9 @@ async def get_user_test_history(user_id: int):
 @router.patch("/{user_id}/status")
 async def update_user_status(user_id: int, status: Dict[str, Any]):
     try:
-        is_active = status.get('is_active', False)
+        is_active_val = status.get('is_active', False)
+        # Convert to integer for database (1 = active, 0 = inactive)
+        is_active = 1 if is_active_val else 0
         
         # Check if user exists
         user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [user_id])

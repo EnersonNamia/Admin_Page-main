@@ -130,7 +130,44 @@ function RecommendationsPage() {
       // Fallback to regular endpoint if filter fails
       try {
         const response = await axios.get(`${API_BASE_URL}/recommendations?page=${page}&limit=${itemsPerPage}`);
-        setRecommendations(response.data.recommendations || []);
+        const flatRecs = response.data.recommendations || [];
+        
+        // Transform flat recommendations to grouped format
+        const groupedByAttempt = {};
+        for (const rec of flatRecs) {
+          const attemptId = rec.attempt_id || `no_attempt_${rec.recommendation_id}`;
+          
+          if (!groupedByAttempt[attemptId]) {
+            groupedByAttempt[attemptId] = {
+              attempt_id: rec.attempt_id,
+              user_id: rec.user_id,
+              user_name: rec.user_name,
+              user_email: rec.user_email,
+              top_recommendation: null,
+              other_recommendations: []
+            };
+          }
+          
+          const recData = {
+            recommendation_id: rec.recommendation_id,
+            course_id: rec.course_id,
+            course_name: rec.course_name,
+            reasoning: rec.reasoning,
+            status: rec.status || 'pending',
+            recommendation_rank: rec.recommendation_rank || 1,
+            recommended_at: rec.recommended_at
+          };
+          
+          if (groupedByAttempt[attemptId].top_recommendation === null) {
+            groupedByAttempt[attemptId].top_recommendation = recData;
+          } else {
+            groupedByAttempt[attemptId].other_recommendations.push(recData);
+          }
+        }
+        
+        const groupedList = Object.values(groupedByAttempt);
+        setRecommendations(groupedList);
+        
         if (response.data.pagination) {
           setTotalPages(response.data.pagination.pages || 1);
           setTotalRecommendations(response.data.pagination.total || 0);

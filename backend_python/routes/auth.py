@@ -40,8 +40,9 @@ async def login(credentials: LoginRequest):
         if not bcrypt.verify(password_to_check, user['password_hash']):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         
-        # Check if user is active
-        if not user['is_active']:
+        # Check if user is active (is_active can be BOOLEAN or INTEGER depending on DB schema)
+        is_active = user['is_active']
+        if is_active is False or is_active == 0:
             raise HTTPException(status_code=403, detail="Account is deactivated")
         
         # Update last_login timestamp

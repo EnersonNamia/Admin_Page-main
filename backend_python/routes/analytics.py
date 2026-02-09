@@ -400,7 +400,7 @@ async def export_analytics_pdf():
         
         # Gather all analytics data
         total_users = execute_query_one('SELECT COUNT(*) as count FROM users')
-        active_users = execute_query_one("SELECT COUNT(*) as count FROM users WHERE is_active = true")
+        active_users = execute_query_one("SELECT COUNT(*) as count FROM users WHERE is_active = 1")
         total_courses = execute_query_one('SELECT COUNT(*) as count FROM courses')
         total_tests = execute_query_one('SELECT COUNT(*) as count FROM tests')
         total_questions = execute_query_one('SELECT COUNT(*) as count FROM questions')

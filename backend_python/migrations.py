@@ -85,6 +85,114 @@ def run_migrations():
         else:
             print("   ✅ user_test_attempts table already exists")
         
+        # Migration 4: Add recommendation_rank column if it doesn't exist
+        print("🔄 Checking for recommendation_rank column in recommendations...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='recommendations' AND column_name='recommendation_rank'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding recommendation_rank column...")
+            cursor.execute("""
+                ALTER TABLE recommendations 
+                ADD COLUMN recommendation_rank INTEGER DEFAULT 1
+            """)
+            print("   ✅ recommendation_rank column added")
+        else:
+            print("   ✅ recommendation_rank column already exists")
+        
+        # Migration 5: Add status column to recommendations if it doesn't exist
+        print("🔄 Checking for status column in recommendations...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='recommendations' AND column_name='status'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding status column...")
+            cursor.execute("""
+                ALTER TABLE recommendations 
+                ADD COLUMN status VARCHAR(20) DEFAULT 'pending'
+            """)
+            print("   ✅ status column added")
+        else:
+            print("   ✅ status column already exists")
+        
+        # Migration 6: Add admin_notes column to recommendations if it doesn't exist
+        print("🔄 Checking for admin_notes column in recommendations...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='recommendations' AND column_name='admin_notes'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding admin_notes column...")
+            cursor.execute("""
+                ALTER TABLE recommendations 
+                ADD COLUMN admin_notes TEXT
+            """)
+            print("   ✅ admin_notes column added")
+        else:
+            print("   ✅ admin_notes column already exists")
+        
+        # Migration 7: Update recommendation_rank for existing recommendations
+        print("🔄 Updating recommendation ranks for existing data...")
+        cursor.execute("""
+            WITH ranked AS (
+                SELECT recommendation_id,
+                       ROW_NUMBER() OVER (PARTITION BY attempt_id ORDER BY recommendation_id) as rn
+                FROM recommendations
+                WHERE recommendation_rank IS NULL OR recommendation_rank = 1
+            )
+            UPDATE recommendations r
+            SET recommendation_rank = ranked.rn
+            FROM ranked
+            WHERE r.recommendation_id = ranked.recommendation_id
+        """)
+        print("   ✅ Recommendation ranks updated")
+
+        # Migration 8: Add status_updated_at column to recommendations
+        print("🔄 Checking for status_updated_at column in recommendations...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='recommendations' AND column_name='status_updated_at'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding status_updated_at column...")
+            cursor.execute("""
+                ALTER TABLE recommendations 
+                ADD COLUMN status_updated_at TIMESTAMP WITH TIME ZONE
+            """)
+            print("   ✅ status_updated_at column added")
+        else:
+            print("   ✅ status_updated_at column already exists")
+        
+        # Migration 9: Add updated_by column to recommendations
+        print("🔄 Checking for updated_by column in recommendations...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='recommendations' AND column_name='updated_by'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding updated_by column...")
+            cursor.execute("""
+                ALTER TABLE recommendations 
+                ADD COLUMN updated_by VARCHAR(100)
+            """)
+            print("   ✅ updated_by column added")
+        else:
+            print("   ✅ updated_by column already exists")
+        
+        # Migration 10: Fix NULL is_active values for existing users
+        print("🔄 Fixing NULL is_active values for users...")
+        cursor.execute("""
+            UPDATE users SET is_active = 1 WHERE is_active IS NULL
+        """)
+        print("   ✅ is_active values fixed")
+
         conn.commit()
         print("\n✅ All migrations completed successfully!")
         
