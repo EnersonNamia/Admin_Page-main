@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './CoursesPage.css';
 import { useToast } from '../components/Toast';
@@ -12,6 +12,7 @@ function CoursesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -53,13 +54,23 @@ function CoursesPage() {
     'Skill Traits': ['Technical-Skill', 'People-Skill', 'Creative-Skill', 'Analytical-Skill', 'Physical-Skill', 'Admin-Skill'],
   };
 
+  // Debounce search input
   useEffect(() => {
-    fetchCourses();
-  }, [page, pageSize]);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); // Reset to page 1 when search changes
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
-    filterCourses();
-  }, [courses, search]);
+    fetchCourses();
+  }, [page, pageSize, debouncedSearch]);
+
+  useEffect(() => {
+    // No longer need client-side filtering, search is now server-side
+    setFilteredCourses(courses);
+  }, [courses]);
 
   const fetchCourses = async () => {
     try {
@@ -67,9 +78,11 @@ function CoursesPage() {
       const response = await axios.get(`${API_BASE_URL}/courses`, {
         params: {
           page: page,
-          limit: pageSize
+          limit: pageSize,
+          search: debouncedSearch || undefined  // Server-side search
         }
       });
+      console.log('Fetched courses:', response.data);
       setCoursesData(response.data.courses || []);
       setTotalPages(response.data.pagination.pages || 1);
     } catch (err) {
@@ -161,18 +174,22 @@ function CoursesPage() {
       return;
     }
     try {
-      await axios.put(`${API_BASE_URL}/courses/${editData.course_id}`, {
+      const updatePayload = {
         course_name: editData.course_name,
         description: editData.description,
         required_strand: editData.required_strand || null,
         minimum_gwa: editData.minimum_gwa ? parseFloat(editData.minimum_gwa) : null,
         trait_tag: editData.trait_tag || null,
-      });
+      };
+      console.log('Updating course with payload:', updatePayload);
+      const response = await axios.put(`${API_BASE_URL}/courses/${editData.course_id}`, updatePayload);
+      console.log('Update response:', response.data);
       setEditModal(false);
       setEditData(null);
       fetchCourses();
       toast.success('Course updated successfully!');
     } catch (err) {
+      console.error('Update failed:', err.response?.data || err.message);
       toast.error(err.response?.data?.detail || 'Failed to update course');
     }
   };
