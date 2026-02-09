@@ -21,6 +21,10 @@ function QuestionsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [editModal, setEditModal] = useState(false);
   const [editData, setEditData] = useState(null);
+  const [editOptions, setEditOptions] = useState([]);
+  const [editOptionsLoading, setEditOptionsLoading] = useState(false);
+  const [showEditTraitSelector, setShowEditTraitSelector] = useState(false);
+  const [editSelectedOptionIndex, setEditSelectedOptionIndex] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
@@ -99,11 +103,12 @@ function QuestionsPage() {
     fetchQuestions();
     fetchTests();
     fetchAvailableTraits();
-  }, [page, pageSize]);
+  }, [page, pageSize, search, testFilter]);
 
   useEffect(() => {
-    filterQuestions();
-  }, [questions, search, testFilter]);
+    // Server-side filtering is now used, just pass through
+    setFilteredQuestions(questions);
+  }, [questions]);
 
   const fetchQuestions = async () => {
     try {
@@ -112,9 +117,11 @@ function QuestionsPage() {
         params: {
           page: page,
           limit: pageSize,
-          test_id: testFilter || undefined
+          test_id: testFilter || undefined,
+          search: search || undefined  // Server-side search
         }
       });
+      console.log('Fetched questions:', response.data);
       setQuestionsData(response.data.questions || []);
       setTotalPages(response.data.pagination.pages || 1);
     } catch (err) {
@@ -273,30 +280,65 @@ function QuestionsPage() {
   };
 
   // Open edit modal
-  const handleEditClick = (question) => {
+  const handleEditClick = async (question) => {
     setEditData({
       question_id: question.question_id,
       question_text: question.question_text || '',
-      question_type: question.question_type || 'multiple_choice',
       question_order: question.question_order || 1,
     });
+    setEditOptions([]);
+    setEditOptionsLoading(true);
     setEditModal(true);
+    
+    // Fetch options for this question
+    try {
+      const response = await axios.get(`${API_BASE_URL}/tests/questions/${question.question_id}/options`);
+      setEditOptions(response.data.options || []);
+    } catch (err) {
+      console.error('Failed to fetch options:', err);
+      toast.error('Failed to load question options');
+    } finally {
+      setEditOptionsLoading(false);
+    }
+  };
+
+  // Update a single edit option
+  const updateEditOption = (index, field, value) => {
+    setEditOptions(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
   };
 
   // Submit edit
   const handleEditQuestion = async () => {
     if (!editData) return;
     try {
-      await axios.put(`${API_BASE_URL}/tests/questions/${editData.question_id}`, {
+      // Update question text
+      const updatePayload = {
         question_text: editData.question_text,
-        question_type: editData.question_type,
         question_order: editData.question_order,
-      });
+      };
+      console.log('Updating question with payload:', updatePayload);
+      await axios.put(`${API_BASE_URL}/tests/questions/${editData.question_id}`, updatePayload);
+      
+      // Update each option
+      for (const option of editOptions) {
+        await axios.put(`${API_BASE_URL}/tests/options/${option.option_id}`, {
+          option_text: option.option_text,
+          trait_tag: option.trait_tag
+        });
+      }
+      
+      console.log('Question and options updated successfully');
       setEditModal(false);
       setEditData(null);
+      setEditOptions([]);
       fetchQuestions();
       toast.success('Question updated successfully!');
     } catch (err) {
+      console.error('Update failed:', err.response?.data || err.message);
       toast.error(err.response?.data?.detail || 'Failed to update question');
     }
   };
@@ -1109,9 +1151,9 @@ function QuestionsPage() {
             background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
             borderRadius: '16px',
             padding: '30px',
-            maxWidth: '600px',
-            width: '90%',
-            maxHeight: '80vh',
+            maxWidth: '800px',
+            width: '95%',
+            maxHeight: '90vh',
             overflowY: 'auto',
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
             border: '1px solid rgba(255, 255, 255, 0.1)'
@@ -1125,6 +1167,7 @@ function QuestionsPage() {
                 onClick={() => {
                   setEditModal(false);
                   setEditData(null);
+                  setEditOptions([]);
                 }}
                 style={{
                   background: 'none',
@@ -1142,9 +1185,10 @@ function QuestionsPage() {
               e.preventDefault();
               handleEditQuestion();
             }}>
+              {/* Question Text */}
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
-                  Question Text
+                  Question Text *
                 </label>
                 <textarea
                   value={editData.question_text || ''}
@@ -1157,57 +1201,118 @@ function QuestionsPage() {
                     background: 'rgba(255, 255, 255, 0.05)',
                     color: '#fff',
                     fontSize: '14px',
-                    minHeight: '100px',
+                    minHeight: '80px',
                     resize: 'vertical'
                   }}
                   required
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
-                    Question Type
-                  </label>
-                  <select
-                    value={editData.question_type || 'multiple_choice'}
-                    onChange={(e) => setEditData({ ...editData, question_type: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                  >
-                    <option value="multiple_choice" style={{ background: '#1a1a2e' }}>Multiple Choice</option>
-                    <option value="likert" style={{ background: '#1a1a2e' }}>Likert Scale</option>
-                    <option value="true_false" style={{ background: '#1a1a2e' }}>True/False</option>
-                  </select>
-                </div>
+              {/* Question Order */}
+              <div style={{ marginBottom: '25px' }}>
+                <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
+                  Question Order
+                </label>
+                <input
+                  type="number"
+                  value={editData.question_order || 1}
+                  onChange={(e) => setEditData({ ...editData, question_order: parseInt(e.target.value) })}
+                  style={{
+                    width: '120px',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: '#fff',
+                    fontSize: '14px'
+                  }}
+                  min="1"
+                />
+              </div>
 
-                <div>
-                  <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
-                    Question Order
-                  </label>
-                  <input
-                    type="number"
-                    value={editData.question_order || 1}
-                    onChange={(e) => setEditData({ ...editData, question_order: parseInt(e.target.value) })}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      color: '#fff',
-                      fontSize: '14px'
-                    }}
-                    min="1"
-                  />
-                </div>
+              {/* Options Section */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '12px', fontSize: '14px' }}>
+                  <i className="fas fa-list" style={{ marginRight: '8px' }}></i>
+                  Answer Options & Trait Tags
+                </label>
+                
+                {editOptionsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#a0a0a0' }}>
+                    <i className="fas fa-spinner fa-spin" style={{ marginRight: '8px' }}></i>
+                    Loading options...
+                  </div>
+                ) : editOptions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                    No options found for this question
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {editOptions.map((option, index) => (
+                      <div key={option.option_id} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 200px',
+                        gap: '12px',
+                        padding: '15px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                      }}>
+                        <div>
+                          <label style={{ display: 'block', color: '#6b7280', marginBottom: '6px', fontSize: '12px' }}>
+                            Option {index + 1}
+                          </label>
+                          <input
+                            type="text"
+                            value={option.option_text || ''}
+                            onChange={(e) => updateEditOption(index, 'option_text', e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              background: 'rgba(255, 255, 255, 0.05)',
+                              color: '#fff',
+                              fontSize: '14px'
+                            }}
+                            placeholder="Option text..."
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', color: '#6b7280', marginBottom: '6px', fontSize: '12px' }}>
+                            Trait Tag
+                          </label>
+                          <div style={{ position: 'relative' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditSelectedOptionIndex(index);
+                                setShowEditTraitSelector(true);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                background: option.trait_tag ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                color: option.trait_tag ? '#a78bfa' : '#6b7280',
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}
+                            >
+                              <span>{option.trait_tag || 'Select trait...'}</span>
+                              <i className="fas fa-chevron-down" style={{ fontSize: '10px' }}></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', marginTop: '25px' }}>
@@ -1216,6 +1321,7 @@ function QuestionsPage() {
                   onClick={() => {
                     setEditModal(false);
                     setEditData(null);
+                    setEditOptions([]);
                   }}
                   style={{
                     padding: '12px 25px',
@@ -1249,6 +1355,82 @@ function QuestionsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Trait Selector Modal */}
+      {showEditTraitSelector && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+            borderRadius: '16px',
+            padding: '25px',
+            maxWidth: '700px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ color: '#fff', margin: 0 }}>
+                <i className="fas fa-tags" style={{ marginRight: '10px', color: '#8b5cf6' }}></i>
+                Select Trait Tag
+              </h3>
+              <button
+                onClick={() => setShowEditTraitSelector(false)}
+                style={{ background: 'none', border: 'none', color: '#a0a0a0', cursor: 'pointer', fontSize: '20px' }}
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+              {Object.entries(traitCategories).slice(0, 11).map(([category, traits]) => (
+                <div key={category} style={{ marginBottom: '15px' }}>
+                  <div style={{ color: '#8b5cf6', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>
+                    {category}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {traits.map(trait => (
+                      <button
+                        key={trait}
+                        type="button"
+                        onClick={() => {
+                          updateEditOption(editSelectedOptionIndex, 'trait_tag', trait);
+                          setShowEditTraitSelector(false);
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '15px',
+                          border: 'none',
+                          background: editOptions[editSelectedOptionIndex]?.trait_tag === trait 
+                            ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' 
+                            : 'rgba(255, 255, 255, 0.1)',
+                          color: '#fff',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {trait}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

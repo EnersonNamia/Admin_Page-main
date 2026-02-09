@@ -42,6 +42,10 @@ class OptionCreate(BaseModel):
     option_text: str
     trait: Optional[str] = None
 
+class OptionUpdate(BaseModel):
+    option_text: Optional[str] = None
+    trait_tag: Optional[str] = None
+
 # Get all tests with pagination and search
 @router.get("/")
 async def get_tests(
@@ -486,6 +490,64 @@ async def create_option(question_id: int, option: OptionCreate):
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to create option: {str(error)}")
+
+# Get options for a question
+@router.get("/questions/{question_id}/options")
+async def get_question_options(question_id: int):
+    try:
+        # Verify question exists
+        question = execute_query_one('SELECT question_id FROM questions WHERE question_id = $1', [question_id])
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        options = execute_query(
+            'SELECT option_id, question_id, option_text, trait_tag FROM options WHERE question_id = $1 ORDER BY option_id',
+            [question_id]
+        )
+        
+        return {"options": options}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch options: {str(error)}")
+
+# Update option
+@router.put("/options/{option_id}")
+async def update_option(option_id: int, option: OptionUpdate):
+    try:
+        # Check if option exists
+        existing = execute_query_one('SELECT option_id FROM options WHERE option_id = $1', [option_id])
+        if not existing:
+            raise HTTPException(status_code=404, detail="Option not found")
+        
+        # Build dynamic update query
+        updates = []
+        values = []
+        param_count = 1
+        
+        if option.option_text is not None:
+            updates.append(f"option_text = ${param_count}")
+            values.append(option.option_text)
+            param_count += 1
+        
+        if option.trait_tag is not None:
+            updates.append(f"trait_tag = ${param_count}")
+            values.append(option.trait_tag)
+            param_count += 1
+        
+        if not updates:
+            return {"message": "No fields to update"}
+        
+        values.append(option_id)
+        query = f"UPDATE options SET {', '.join(updates)} WHERE option_id = ${param_count}"
+        
+        execute_query(query, values, fetch=False)
+        
+        return {"message": "Option updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to update option: {str(error)}")
 
 # Delete option
 @router.delete("/options/{option_id}")
