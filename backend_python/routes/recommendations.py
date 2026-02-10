@@ -728,6 +728,7 @@ async def update_recommendation(recommendation_id: int, update: RecommendationUp
         update_fields = []
         params = []
         param_index = 1
+        new_status = None
         
         if update.course_id is not None:
             # Verify course exists
@@ -747,8 +748,9 @@ async def update_recommendation(recommendation_id: int, update: RecommendationUp
             valid_statuses = ['pending', 'approved', 'rejected', 'completed']
             if update.status.lower() not in valid_statuses:
                 raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+            new_status = update.status.lower()
             update_fields.append(f"status = ${param_index}")
-            params.append(update.status.lower())
+            params.append(new_status)
             param_index += 1
             update_fields.append(f"status_updated_at = ${param_index}")
             params.append(datetime.now())
@@ -777,6 +779,14 @@ async def update_recommendation(recommendation_id: int, update: RecommendationUp
         """
         
         execute_query(query, params, fetch=False)
+        
+        # If status was updated, also update all other recommendations for the same attempt
+        if new_status is not None and existing.get('attempt_id'):
+            execute_query("""
+                UPDATE recommendations 
+                SET status = $1, status_updated_at = $2, updated_by = 'admin'
+                WHERE attempt_id = $3 AND recommendation_id != $4
+            """, [new_status, datetime.now(), existing['attempt_id'], recommendation_id], fetch=False)
         
         # Fetch updated recommendation
         updated = execute_query_one("""

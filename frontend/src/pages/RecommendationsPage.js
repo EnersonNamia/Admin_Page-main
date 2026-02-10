@@ -964,9 +964,9 @@ function RecommendationsPage() {
                             </td>
                           </tr>
                           
-                          {/* Expanded rows - Other Recommendations */}
+                          {/* Expanded rows - Other Recommendations (display only, no actions) */}
                           {isExpanded && otherRecs.map((otherRec, index) => (
-                            <tr key={otherRec.recommendation_id} className={`status-row-${otherRec.status || 'pending'} sub-recommendation-row`}>
+                            <tr key={otherRec.recommendation_id} className={`status-row-${topRec.status || 'pending'} sub-recommendation-row`}>
                               <td className="checkbox-col"></td>
                               <td className="expand-col">
                                 <span className="sub-row-indicator">└</span>
@@ -982,25 +982,24 @@ function RecommendationsPage() {
                               </td>
                               <td className="reasoning-cell" title={otherRec.reasoning}>{otherRec.reasoning || 'N/A'}</td>
                               <td>
-                                <select 
-                                  value={otherRec.status || 'pending'} 
-                                  onChange={(e) => handleQuickStatusChange(otherRec.recommendation_id, e.target.value)}
-                                  className={`status-select ${otherRec.status || 'pending'} small`}
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="approved">Approved</option>
-                                  <option value="rejected">Rejected</option>
-                                  <option value="completed">Completed</option>
-                                </select>
+                                <span className={`status-badge ${topRec.status || 'pending'}`} style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  textTransform: 'capitalize',
+                                  backgroundColor: topRec.status === 'approved' ? 'rgba(34, 197, 94, 0.2)' : 
+                                                   topRec.status === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 
+                                                   topRec.status === 'completed' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                  color: topRec.status === 'approved' ? '#22c55e' : 
+                                         topRec.status === 'rejected' ? '#ef4444' : 
+                                         topRec.status === 'completed' ? '#6366f1' : '#f59e0b'
+                                }}>
+                                  {topRec.status || 'pending'}
+                                </span>
                               </td>
                               <td className="actions-cell">
-                                <button 
-                                  className="btn btn-sm btn-secondary" 
-                                  onClick={() => handleEditRecommendation({...otherRec, user_name: assessment.user_name, user_email: assessment.user_email, confidence_score: assessment.confidence_score, traits_found: assessment.traits_found, total_questions: assessment.total_questions, assessment_date: assessment.assessment_date})}
-                                  title="Edit Details"
-                                >
-                                  <i className="fas fa-edit"></i>
-                                </button>
+                                <span style={{ color: '#6b7280', fontSize: '11px', fontStyle: 'italic' }}>—</span>
                               </td>
                             </tr>
                           ))}
