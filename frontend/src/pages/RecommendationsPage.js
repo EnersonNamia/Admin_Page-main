@@ -1679,6 +1679,12 @@ function RecommendationsPage() {
                       <button className="btn btn-secondary" onClick={() => handleExportCSV('approved')}>
                         <i className="fas fa-check"></i> Approved Only
                       </button>
+                      <button className="btn btn-secondary" onClick={() => handleExportCSV('rejected')}>
+                        <i className="fas fa-times"></i> Rejected Only
+                      </button>
+                      <button className="btn btn-secondary" onClick={() => handleExportCSV('completed')}>
+                        <i className="fas fa-flag-checkered"></i> Completed Only
+                      </button>
                     </div>
                   </div>
                 </>
