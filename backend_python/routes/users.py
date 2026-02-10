@@ -233,14 +233,41 @@ async def update_user(user_id: int, user: UserUpdate):
             raise HTTPException(status_code=409, detail="Email already exists")
         raise HTTPException(status_code=500, detail=f"Failed to update user: {str(error)}")
 
-# Delete user
+# Delete user and all related data
 @router.delete("/{user_id}")
 async def delete_user(user_id: int):
     try:
-        result = execute_query('DELETE FROM users WHERE user_id = $1', [user_id], fetch=False)
-        
-        if result == 0:
+        # First check if user exists
+        user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [user_id])
+        if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get all attempt_ids for this user to delete related records
+        attempts = execute_query('SELECT attempt_id FROM test_attempts WHERE user_id = $1', [user_id])
+        attempt_ids = [a['attempt_id'] for a in attempts] if attempts else []
+        
+        # Step 1: Delete recommendations (references both users.user_id and test_attempts.attempt_id)
+        if attempt_ids:
+            placeholders = ','.join(['$' + str(i+1) for i in range(len(attempt_ids))])
+            execute_query(f'DELETE FROM recommendations WHERE attempt_id IN ({placeholders})', attempt_ids, fetch=False)
+        execute_query('DELETE FROM recommendations WHERE user_id = $1', [user_id], fetch=False)
+        
+        # Step 2: Delete student_answers (references test_attempts.attempt_id)
+        if attempt_ids:
+            placeholders = ','.join(['$' + str(i+1) for i in range(len(attempt_ids))])
+            execute_query(f'DELETE FROM student_answers WHERE attempt_id IN ({placeholders})', attempt_ids, fetch=False)
+        
+        # Step 3: Delete recommendation_feedback (references users.user_id)
+        execute_query('DELETE FROM recommendation_feedback WHERE user_id = $1', [user_id], fetch=False)
+        
+        # Step 4: Delete test_attempts (references users.user_id)
+        execute_query('DELETE FROM test_attempts WHERE user_id = $1', [user_id], fetch=False)
+        
+        # Step 5: Delete user_test_attempts (references users.user_id)
+        execute_query('DELETE FROM user_test_attempts WHERE user_id = $1', [user_id], fetch=False)
+        
+        # Step 6: Finally delete the user
+        execute_query('DELETE FROM users WHERE user_id = $1', [user_id], fetch=False)
         
         return {"message": "User deleted successfully"}
     except HTTPException:
