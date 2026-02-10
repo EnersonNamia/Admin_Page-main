@@ -186,16 +186,16 @@ function QuestionsPage() {
         return;
       }
 
-      // Find Adaptive Assessment test ID
-      const smartAssessmentTest = tests.find(t => t.test_name === 'Adaptive Assessment');
-      if (!smartAssessmentTest) {
-        setError('Adaptive Assessment test not found');
+      // Find Career Assessment test ID (test_id=1)
+      const careerAssessmentTest = tests.find(t => t.test_name === 'Career Assessment');
+      if (!careerAssessmentTest) {
+        setError('Career Assessment test not found');
         return;
       }
 
       // First create the question
       const questionResponse = await axios.post(`${API_BASE_URL}/tests/questions`, {
-        test_id: smartAssessmentTest.test_id,
+        test_id: careerAssessmentTest.test_id,
         question_text: formData.question_text,
         question_order: 1,
         question_type: 'standard',
@@ -715,16 +715,16 @@ function QuestionsPage() {
                 )}
 
                 <div className="form-group" style={{marginBottom: '25px'}}>
-                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px'}}>Adaptive Assessment</label>
+                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px'}}>Career Assessment</label>
                   <input
                     type="text"
-                    value="Adaptive Assessment"
+                    value="Career Assessment"
                     disabled
                     style={{opacity: 0.6, padding: '12px', background: '#FAF5F0', border: '1px solid #E8D5C4', borderRadius: '6px', color: '#5A4A3A'}}
                   />
                   <input
                     type="hidden"
-                    value={tests.find(t => t.test_name === 'Adaptive Assessment')?.test_id || ''}
+                    value={tests.find(t => t.test_name === 'Career Assessment')?.test_id || ''}
                     onChange={(e) => setFormData({ ...formData, test_id: parseInt(e.target.value) })}
                   />
                 </div>

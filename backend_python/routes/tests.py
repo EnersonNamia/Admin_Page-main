@@ -27,7 +27,7 @@ class TestUpdate(BaseModel):
 class QuestionCreate(BaseModel):
     test_id: int
     question_text: str
-    question_order: int
+    question_order: Optional[int] = None  # Auto-calculated if not provided
     question_type: Optional[str] = "multiple_choice"  # multiple_choice, true_false, short_answer
     category: Optional[str] = None
 
@@ -385,10 +385,17 @@ async def create_question(question: QuestionCreate):
         if not test:
             raise HTTPException(status_code=404, detail="Test not found")
         
+        # Auto-calculate the next question_order globally across ALL questions
+        max_order_result = execute_query_one(
+            'SELECT COALESCE(MAX(question_order), 0) as max_order FROM questions',
+            []
+        )
+        next_order = int(max_order_result['max_order']) + 1
+        
         result = execute_query_one(
             """INSERT INTO questions (test_id, question_text, question_order, question_type, category)
                VALUES ($1, $2, $3, $4, $5) RETURNING question_id""",
-            [question.test_id, question.question_text, question.question_order, question.question_type, question.category]
+            [question.test_id, question.question_text, next_order, question.question_type, question.category]
         )
         
         return {
@@ -476,10 +483,17 @@ async def create_option(question_id: int, option: OptionCreate):
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
         
+        # Auto-calculate the next option_order globally across ALL options
+        max_order_result = execute_query_one(
+            'SELECT COALESCE(MAX(option_order), 0) as max_order FROM options',
+            []
+        )
+        next_order = int(max_order_result['max_order']) + 1
+        
         result = execute_query_one(
-            """INSERT INTO options (question_id, option_text, trait_tag, weight)
-               VALUES ($1, $2, $3, $4) RETURNING option_id""",
-            [question_id, option.option_text, option.trait or None, 1]
+            """INSERT INTO options (question_id, option_text, trait_tag, weight, option_order)
+               VALUES ($1, $2, $3, $4, $5) RETURNING option_id""",
+            [question_id, option.option_text, option.trait or None, 1, next_order]
         )
         
         return {
