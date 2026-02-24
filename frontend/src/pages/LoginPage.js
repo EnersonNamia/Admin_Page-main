@@ -16,19 +16,7 @@ function LoginPage({ onLogin }) {
     setLoading(true);
 
     try {
-      // For demo purposes, accept default admin credentials
-      if (email === 'admin@system.com' && password === 'admin123') {
-        const adminData = {
-          id: 1,
-          full_name: 'System Administrator',
-          email: 'admin@system.com',
-          role: 'admin'
-        };
-        onLogin('demo-token-12345', adminData);
-        return;
-      }
-
-      // Try to authenticate with backend
+      // Authenticate with backend
       const response = await axios.post(`${API_BASE_URL}/auth/login`, {
         email,
         password
@@ -38,10 +26,20 @@ function LoginPage({ onLogin }) {
         onLogin(response.data.token, response.data.user);
       }
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-        'Invalid email or password. Try admin@system.com / admin123'
-      );
+      // Handle different error types
+      if (err.response?.status === 429) {
+        setError('Too many login attempts. Please try again later.');
+      } else if (err.response?.status === 401) {
+        setError('Invalid email or password.');
+      } else if (err.response?.status === 403) {
+        setError('Account is deactivated. Please contact an administrator.');
+      } else {
+        setError(
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          'Login failed. Please try again.'
+        );
+      }
     } finally {
       setLoading(false);
     }

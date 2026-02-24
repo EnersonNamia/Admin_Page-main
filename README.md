@@ -1,265 +1,260 @@
-# Admin Dashboard - Capstone Project
+# Course Recommendation System - Admin Panel
 
-A comprehensive, modern admin dashboard built with HTML, CSS, and JavaScript. This admin panel provides a complete interface for managing users, content, analytics, settings, database operations, and reports.
+## Overview
 
-## Features
+A full-stack admin dashboard for the Course Recommendation System built with:
+- **Backend:** FastAPI (Python)
+- **Frontend:** React
+- **Database:** PostgreSQL (Railway)
 
-### 🎯 Dashboard Overview
-- Real-time statistics and metrics
-- Recent activity feed
-- System status monitoring
-- Quick action buttons
+## Security Features
 
-### 👥 User Management
-- View, add, edit, and delete users
-- Role-based access control (Admin, Moderator, User)
-- Status management (Active, Inactive, Banned)
-- Advanced search and filtering
-- Pagination for large datasets
+- ✅ JWT Authentication with secure token generation
+- ✅ Password hashing with bcrypt
+- ✅ Rate limiting (100 requests per 15 minutes)
+- ✅ Brute force protection (5 attempts → 15 min lockout)
+- ✅ Security headers (XSS, CSRF, Clickjacking protection)
+- ✅ Environment variables for sensitive data
 
-### 📄 Content Management
-- Page management interface
-- Media file organization
-- Blog post management
-- Content statistics
+---
 
-### 📊 Analytics
-- Traffic overview charts
-- User engagement metrics
-- Performance analytics
-- Custom date ranges
+## Quick Start
 
-### ⚙️ Settings
-- General site settings
-- Security configurations
-- System preferences
-- User profile management
-
-### 🗄️ Database Management
-- Database backup and restore
-- Table optimization
-- Storage monitoring
-- Backup history
-
-### 📈 Reports
-- User activity reports
-- System performance reports
-- Content analytics reports
-- Export functionality
-
-## File Structure
-
-```
-Admin_Page/
-├── index.html          # Main HTML structure
-├── styles.css          # Comprehensive CSS styling
-├── script.js           # JavaScript functionality
-├── README.md           # This documentation
-└── config.json         # Configuration file
-```
-
-## Installation & Setup
-
-1. **Download Files**: Ensure all files are in the same directory
-2. **Web Server**: Serve files through a web server (not file:// protocol)
-3. **Dependencies**: All external dependencies are loaded via CDN
-
-### Local Development
+### 1. Install Dependencies
 
 ```bash
-# Using Python's built-in server
-python -m http.server 8000
+# Backend
+cd backend_python
+pip install -r requirements.txt
 
-# Using Node.js http-server
-npx http-server
-
-# Using PHP
-php -S localhost:8000
+# Frontend
+cd ../frontend
+npm install
 ```
 
-Then navigate to `http://localhost:8000`
+### 2. Configure Environment
 
-## Technology Stack
-
-- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
-- **Icons**: Font Awesome 6.0
-- **Fonts**: Google Fonts (Inter)
-- **Responsive**: Mobile-first design approach
-
-## Browser Support
-
-- Chrome 60+
-- Firefox 60+
-- Safari 12+
-- Edge 79+
-
-## Key Components
-
-### Navigation System
-- Collapsible sidebar
-- Active state management
-- Breadcrumb navigation
-- Mobile-responsive hamburger menu
-
-### Modal System
-- Reusable modal components
-- Form validation
-- Dynamic content loading
-- Keyboard accessibility
-
-### Table System
-- Sortable columns
-- Search functionality
-- Filtering options
-- Pagination controls
-
-### Notification System
-- Toast notifications
-- Multiple notification types
-- Auto-dismiss functionality
-- Manual close options
-
-## Customization
-
-### Color Scheme
-The admin panel uses CSS custom properties for easy theming:
-
-```css
-:root {
-    --primary-color: #2563eb;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
-}
+Copy the example environment file and update with your values:
+```bash
+cd backend_python
+cp .env.example .env
 ```
 
-### Adding New Sections
-1. Add navigation item in HTML
-2. Create content section
-3. Update JavaScript navigation handler
-4. Implement section-specific functionality
+### 3. Create Admin User
 
-### API Integration
-The dashboard includes placeholder methods for API integration:
-
-```javascript
-// Example API call
-async loadUsers() {
-    try {
-        const users = await this.apiCall('/users');
-        this.users = users;
-        this.renderUsers();
-    } catch (error) {
-        this.showNotification('Failed to load users', 'error');
-    }
-}
+```bash
+cd backend_python
+python create_admin.py
 ```
 
-## Features in Detail
+Follow the prompts to create your admin account with a secure password.
 
-### User Management
-- **CRUD Operations**: Complete Create, Read, Update, Delete functionality
-- **Role Management**: Three-tier role system (Admin, Moderator, User)
-- **Status Control**: Active, Inactive, and Banned user states
-- **Search & Filter**: Real-time search with role and status filters
-- **Bulk Actions**: Select multiple users for batch operations
+### 4. Start the Application
 
-### Content Management
-- **Page Management**: Create, edit, and manage site pages
-- **Media Library**: Upload, organize, and manage media files
-- **Blog System**: Full blog post management with draft support
-- **SEO Tools**: Meta description and keyword management
+**Terminal 1 - Backend:**
+```bash
+cd backend_python
+python main.py
+```
+Backend runs on: http://localhost:5000
 
-### Analytics Dashboard
-- **Traffic Analytics**: Visitor statistics and page views
-- **User Engagement**: Session duration, bounce rate, pages per session
-- **Performance Metrics**: Load times, error rates, system performance
-- **Custom Reports**: Generate reports for specific date ranges
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm start
+```
+Frontend runs on: http://localhost:3000
 
-### Security Features
-- **Two-Factor Authentication**: Optional 2FA for admin accounts
-- **Session Management**: Configurable session timeouts
-- **Login Notifications**: Email alerts for admin logins
-- **Access Logs**: Track admin actions and system access
+### 5. Access Admin Panel
 
-### Database Tools
-- **Backup System**: Automated and manual database backups
-- **Optimization**: Table optimization and database cleanup
-- **Monitoring**: Storage usage and performance monitoring
-- **Restore**: Easy database restoration from backups
+1. Open http://localhost:3000 in your browser
+2. Login with the admin credentials you created
+3. You're in! 🎉
 
-## Responsive Design
+---
 
-The admin panel is fully responsive with breakpoints at:
-- **Desktop**: 1024px+
-- **Tablet**: 768px - 1024px
-- **Mobile**: < 768px
+## Gmail App Password Setup (For Email Notifications)
 
-### Mobile Features
-- Collapsible navigation
-- Touch-friendly interface
-- Optimized table layouts
-- Swipe gestures support
+The system sends email notifications for:
+- Low rating alerts
+- Daily feedback summaries
+- System alerts
 
-## Performance Optimizations
+### How to Get a Gmail App Password:
 
-- **Lazy Loading**: Content sections loaded on demand
-- **Pagination**: Large datasets split into manageable chunks
-- **Debounced Search**: Reduced API calls during search
-- **CSS Grid & Flexbox**: Efficient layouts without heavy frameworks
-- **Minimal Dependencies**: Only essential external resources
+1. **Enable 2-Factor Authentication:**
+   - Go to https://myaccount.google.com/security
+   - Enable "2-Step Verification"
 
-## Security Considerations
+2. **Create App Password:**
+   - Go to https://myaccount.google.com/apppasswords
+   - Select "Mail" as the app
+   - Select "Windows Computer" as the device
+   - Click "Generate"
+   - Copy the 16-character password (e.g., `abcd efgh ijkl mnop`)
 
-- **Input Validation**: All form inputs are validated client-side
-- **XSS Protection**: Content is properly escaped
-- **CSRF Protection**: Form tokens should be implemented server-side
-- **Secure Storage**: Sensitive data should be encrypted
+3. **Update .env File:**
+   ```env
+   SMTP_USER=your_email@gmail.com
+   SMTP_PASSWORD=abcdefghijklmnop  # paste without spaces
+   ADMIN_EMAIL=your_email@gmail.com
+   ```
 
-## Future Enhancements
+---
 
-- **Real-time Notifications**: WebSocket integration
-- **Advanced Charts**: Chart.js or D3.js integration
-- **File Upload**: Drag-and-drop file uploads
-- **Audit Logs**: Comprehensive activity logging
-- **Multi-language**: i18n support
-- **Dark Mode**: Alternative color scheme
-- **Progressive Web App**: PWA features
+## Project Structure
 
-## Browser Compatibility
+```
+Admin_Page-main/
+├── backend_python/           # FastAPI Backend
+│   ├── main.py              # Application entry point
+│   ├── create_admin.py      # Admin user setup script
+│   ├── migrations.py        # Database migrations
+│   ├── requirements.txt     # Python dependencies
+│   ├── .env                 # Environment variables (gitignored)
+│   ├── .env.example         # Environment template
+│   ├── middleware/          # Security middleware
+│   │   └── security.py      # JWT, rate limiting, headers
+│   ├── models/
+│   │   └── database.py      # Database connection
+│   ├── routes/              # API endpoints
+│   │   ├── auth.py          # Authentication
+│   │   ├── users.py         # User management
+│   │   ├── courses.py       # Course management
+│   │   ├── tests.py         # Test management
+│   │   ├── recommendations.py
+│   │   ├── analytics.py
+│   │   └── feedback.py
+│   └── services/            # Business logic
+│       ├── email_service.py
+│       └── pdf_service.py
+│
+├── frontend/                 # React Frontend
+│   ├── src/
+│   │   ├── App.js           # Main application
+│   │   ├── pages/           # Page components
+│   │   │   ├── LoginPage.js
+│   │   │   ├── Dashboard.js
+│   │   │   ├── UsersPage.js
+│   │   │   └── ...
+│   │   └── components/      # Reusable components
+│   └── public/
+│
+├── docker-compose.yml        # Docker configuration
+└── README.md                 # This file
+```
 
-The admin panel uses modern web standards and requires:
-- ES6+ JavaScript support
-- CSS Grid and Flexbox support
-- Fetch API support
-- Modern event handling
+---
 
-## Contributing
+## API Endpoints
 
-To contribute to this admin panel:
+### Authentication (`/api/auth`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | Login and get JWT token |
+| POST | `/api/auth/logout` | Logout (requires auth) |
+| GET | `/api/auth/verify` | Verify token validity |
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+### Users (`/api/users`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users/` | List users (paginated) |
+| GET | `/api/users/{id}` | Get user by ID |
+| POST | `/api/users/` | Create user |
+| PUT | `/api/users/{id}` | Update user |
+| DELETE | `/api/users/{id}` | Delete user |
+
+### Other Endpoints
+- `/api/courses` - Course management
+- `/api/tests` - Test management
+- `/api/recommendations` - Recommendation system
+- `/api/analytics` - Statistics and reports
+- `/api/feedback` - User feedback
+
+### API Documentation
+- **Swagger UI:** http://localhost:5000/docs (development only)
+- **ReDoc:** http://localhost:5000/redoc (development only)
+
+---
+
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DB_HOST` | Database host | `localhost` |
+| `DB_PORT` | Database port | `5432` |
+| `DB_NAME` | Database name | `railway` |
+| `DB_USER` | Database user | `postgres` |
+| `DB_PASSWORD` | Database password | `your_password` |
+| `PORT` | Backend port | `5000` |
+| `ENVIRONMENT` | `development` or `production` | `development` |
+| `JWT_SECRET` | Secret key for JWT | (auto-generated) |
+| `JWT_EXPIRATION_HOURS` | Token expiry | `24` |
+| `RATE_LIMIT_REQUESTS` | Max requests | `100` |
+| `RATE_LIMIT_WINDOW_MINUTES` | Rate limit window | `15` |
+| `SMTP_HOST` | Email server | `smtp.gmail.com` |
+| `SMTP_PORT` | Email port | `587` |
+| `SMTP_USER` | Email address | `your@gmail.com` |
+| `SMTP_PASSWORD` | App password | `your_app_password` |
+| `ADMIN_EMAIL` | Admin notification email | `admin@gmail.com` |
+
+---
+
+## Security Best Practices
+
+### Before Production:
+
+1. **Regenerate JWT Secret:**
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+
+2. **Update Database Password:**
+   - Change the Railway database password
+   - Update `DB_PASSWORD` in `.env`
+
+3. **Regenerate Gmail App Password:**
+   - Revoke old app password in Google settings
+   - Create new one and update `SMTP_PASSWORD`
+
+4. **Set Environment to Production:**
+   ```env
+   ENVIRONMENT=production
+   ```
+   This disables Swagger/ReDoc documentation.
+
+---
+
+## Troubleshooting
+
+### "Invalid email or password"
+- Ensure you've created an admin user with `python create_admin.py`
+- Check that the backend is running on port 5000
+
+### "Too many login attempts"
+- Wait 15 minutes or restart the backend server
+- This is brute force protection working as intended
+
+### "Database connection failed"
+- Check your `.env` file has correct database credentials
+- Ensure the database is accessible (Railway may have IP restrictions)
+
+### Email notifications not working
+- Verify Gmail App Password is correct (16 characters, no spaces)
+- Ensure 2FA is enabled on your Google account
+- Check SMTP_USER matches the account with the app password
+
+---
+
+## Docker Deployment
+
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+```
+
+---
 
 ## License
 
-This admin panel is provided as-is for educational and development purposes. Modify and use according to your project needs.
-
-## Support
-
-For technical support or questions about implementation:
-
-1. Check the browser console for errors
-2. Validate HTML and CSS
-3. Ensure all files are properly linked
-4. Test in multiple browsers
-
-## Version History
-
-- **v1.0.0**: Initial release with core functionality
-- **v1.1.0**: Added responsive design and mobile support
-- **v1.2.0**: Enhanced user management and security features
-- **v1.3.0**: Database management and backup features
+This project is part of a capstone project for educational purposes.

@@ -28,12 +28,29 @@ function App() {
       const token = localStorage.getItem('adminToken');
       if (token) {
         try {
+          // Set authorization header
           axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          setIsAuthenticated(true);
-          const adminData = JSON.parse(localStorage.getItem('adminData'));
-          setAdmin(adminData);
+          
+          // Verify token with backend
+          const response = await axios.get('http://localhost:5000/api/auth/verify');
+          
+          if (response.data.valid) {
+            setIsAuthenticated(true);
+            // Use verified user data from server, fallback to localStorage
+            const adminData = response.data.user || JSON.parse(localStorage.getItem('adminData'));
+            setAdmin(adminData);
+          } else {
+            // Token invalid, clear stored data
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('adminData');
+            delete axios.defaults.headers.common['Authorization'];
+            setIsAuthenticated(false);
+          }
         } catch (error) {
+          // Token verification failed, clear stored data
           localStorage.removeItem('adminToken');
+          localStorage.removeItem('adminData');
+          delete axios.defaults.headers.common['Authorization'];
           setIsAuthenticated(false);
         }
       }

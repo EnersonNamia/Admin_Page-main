@@ -1,18 +1,37 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import os
 from dotenv import load_dotenv
 from models.database import get_db_pool, test_connection, close_all_connections
 from routes import users, courses, tests, recommendations, analytics, feedback, auth
+from middleware.security import get_security_headers
 
 # Load environment variables
 load_dotenv()
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to add security headers to all responses"""
+    
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        
+        # Add security headers
+        security_headers = get_security_headers()
+        for header_name, header_value in security_headers.items():
+            response.headers[header_name] = header_value
+        
+        return response
+
 
 # Create FastAPI app
 app = FastAPI(
     title="Course Recommendation System API",
     description="Backend API for Course Recommendation System Admin Panel",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs" if os.getenv("ENVIRONMENT") == "development" else None,
+    redoc_url="/redoc" if os.getenv("ENVIRONMENT") == "development" else None,
 )
 
 # Configure CORS
@@ -24,6 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Include routers
 app.include_router(auth.router)
