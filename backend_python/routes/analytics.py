@@ -9,45 +9,43 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 @router.get("/system/overview")
 async def get_system_overview():
     try:
-        # Total counts
-        user_count = execute_query_one('SELECT COUNT(*) as count FROM users')
-        course_count = execute_query_one('SELECT COUNT(*) as count FROM courses')
-        test_count = execute_query_one('SELECT COUNT(*) as count FROM tests')
-        recommendation_count = execute_query_one('SELECT COUNT(*) as count FROM recommendations')
-        
-        # Recent activity (last 30 days)
-        recent_users = execute_query_one("""
-            SELECT COUNT(*) as count FROM users 
-            WHERE created_at >= NOW() - INTERVAL '30 days'
-        """)
-        recent_recommendations = execute_query_one("""
-            SELECT COUNT(*) as count FROM recommendations 
-            WHERE recommended_at >= NOW() - INTERVAL '30 days'
-        """)
-        
-        # System performance metrics
-        recommendation_accuracy = execute_query_one("""
+        # Combined query for all counts and stats - Optimized from 5 queries to 1
+        stats = execute_query_one("""
             SELECT 
-                COUNT(*) as total,
-                COUNT(CASE WHEN status = 'accepted' THEN 1 END) as accepted,
-                COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
-                COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
-                ROUND((COUNT(CASE WHEN status = 'accepted' THEN 1 END)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) as acceptance_rate
-            FROM recommendations
+                (SELECT COUNT(*) FROM users) as user_count,
+                (SELECT COUNT(*) FROM courses) as course_count,
+                (SELECT COUNT(*) FROM tests) as test_count,
+                (SELECT COUNT(*) FROM recommendations) as recommendation_count,
+                (SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '30 days') as recent_users,
+                (SELECT COUNT(*) FROM recommendations WHERE recommended_at >= NOW() - INTERVAL '30 days') as recent_recommendations,
+                (SELECT COUNT(*) FROM recommendations) as total_recommendations,
+                (SELECT COUNT(CASE WHEN status = 'accepted' THEN 1 END) FROM recommendations) as accepted,
+                (SELECT COUNT(CASE WHEN status = 'rejected' THEN 1 END) FROM recommendations) as rejected,
+                (SELECT COUNT(CASE WHEN status = 'pending' THEN 1 END) FROM recommendations) as pending
         """)
+        
+        total_recs = stats['recommendation_count']
+        accepted = stats['accepted'] or 0
+        acceptance_rate = (accepted / total_recs * 100) if total_recs > 0 else 0
         
         return {
             "system_overview": {
-                "total_users": int(user_count['count']),
-                "total_courses": int(course_count['count']),
-                "total_tests": int(test_count['count']),
-                "total_recommendations": int(recommendation_count['count'])
+                "total_users": int(stats['user_count']),
+                "total_courses": int(stats['course_count']),
+                "total_tests": int(stats['test_count']),
+                "total_recommendations": int(stats['recommendation_count'])
             },
             "recent_activity": {
-                "new_users_30d": int(recent_users['count']),
-                "new_recommendations_30d": int(recent_recommendations['count'])
+                "new_users_30d": int(stats['recent_users']),
+                "new_recommendations_30d": int(stats['recent_recommendations'])
             },
-            "system_performance": dict(recommendation_accuracy)
+            "system_performance": {
+                "total": int(stats['total_recommendations']),
+                "accepted": int(stats['accepted']),
+                "rejected": int(stats['rejected']),
+                "pending": int(stats['pending']),
+                "acceptance_rate": round(acceptance_rate, 2)
+            }
         }
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch system analytics: {str(error)}")
@@ -65,44 +63,34 @@ async def get_admin_analytics_overview():
     - System health metrics
     """
     try:
-        total_users = execute_query_one('SELECT COUNT(*) as count FROM users')
-        # Only count adaptive test attempts for total assessments
-        total_assessments = execute_query_one("""
-            SELECT COUNT(*) as count FROM test_attempts ta
-            JOIN tests t ON ta.test_id = t.test_id
-            WHERE t.test_type = 'adaptive'
-        """)
-        total_recommendations = execute_query_one('SELECT COUNT(*) as count FROM recommendations')
-        
-        # Get assessment breakdown by type
-        standard_assessments = execute_query_one("""
-            SELECT COUNT(*) as count FROM test_attempts ta
-            JOIN tests t ON ta.test_id = t.test_id
-            WHERE t.test_type = 'assessment'
+        # Combined query - optimized from 3 separate queries to 1
+        stats = execute_query_one("""
+            SELECT 
+                (SELECT COUNT(*) FROM users) as total_users,
+                (SELECT COUNT(*) FROM test_attempts ta
+                    JOIN tests t ON ta.test_id = t.test_id
+                    WHERE t.test_type = 'adaptive') as total_adaptive,
+                (SELECT COUNT(*) FROM test_attempts ta
+                    JOIN tests t ON ta.test_id = t.test_id
+                    WHERE t.test_type = 'assessment') as total_assessment,
+                (SELECT COUNT(*) FROM recommendations) as total_recommendations
         """)
         
-        adaptive_assessments = execute_query_one("""
-            SELECT COUNT(*) as count FROM test_attempts ta
-            JOIN tests t ON ta.test_id = t.test_id
-            WHERE t.test_type = 'adaptive'
-        """)
-        
-        # Average recommendations per assessment
-        total_assess = int(total_assessments['count'])
-        total_recs = int(total_recommendations['count'])
-        avg_recommendations = total_recs / total_assess if total_assess > 0 else 0
+        total_assessments = int(stats['total_adaptive']) + int(stats['total_assessment'])
+        total_recs = int(stats['total_recommendations'])
+        avg_recommendations = total_recs / total_assessments if total_assessments > 0 else 0
         
         return {
             "success": True,
             "timestamp": str(datetime.now()),
             "overview": {
-                "total_users": int(total_users['count']),
-                "total_assessments_taken": total_assess,
+                "total_users": int(stats['total_users']),
+                "total_assessments_taken": total_assessments,
                 "total_recommendations_generated": total_recs,
                 "average_recommendations_per_assessment": round(avg_recommendations, 2),
                 "assessment_breakdown": {
-                    "standard_assessment": int(standard_assessments['count']),
-                    "smart_assessment_adaptive": int(adaptive_assessments['count'])
+                    "standard_assessment": int(stats['total_assessment']),
+                    "smart_assessment_adaptive": int(stats['total_adaptive'])
                 }
             }
         }

@@ -193,10 +193,74 @@ def run_migrations():
         """)
         print("   ✅ is_active values fixed")
 
+        # Migration 11: Add question_order column to questions table
+        print("🔄 Checking for question_order column in questions...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='questions' AND column_name='question_order'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding question_order column...")
+            cursor.execute("""
+                ALTER TABLE questions 
+                ADD COLUMN question_order INTEGER DEFAULT 1
+            """)
+            print("   ✅ question_order column added")
+        else:
+            print("   ✅ question_order column already exists")
+
+        # Migration 12: Add created_at column to questions table
+        print("🔄 Checking for created_at column in questions...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='questions' AND column_name='created_at'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding created_at column...")
+            cursor.execute("""
+                ALTER TABLE questions 
+                ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            """)
+            print("   ✅ created_at column added")
+        else:
+            print("   ✅ created_at column already exists")
+
         conn.commit()
         print("\n✅ All migrations completed successfully!")
         
         cursor.close()
+        
+        # Migration: Create performance indexes
+        print("🔄 Creating database indexes for performance...")
+        
+        indexes = [
+            ("idx_questions_test_id", "CREATE INDEX IF NOT EXISTS idx_questions_test_id ON questions(test_id)"),
+            ("idx_options_question_id", "CREATE INDEX IF NOT EXISTS idx_options_question_id ON options(question_id)"),
+            ("idx_test_attempts_user_id", "CREATE INDEX IF NOT EXISTS idx_test_attempts_user_id ON test_attempts(user_id)"),
+            ("idx_test_attempts_test_id", "CREATE INDEX IF NOT EXISTS idx_test_attempts_test_id ON test_attempts(test_id)"),
+            ("idx_test_attempts_taken_at", "CREATE INDEX IF NOT EXISTS idx_test_attempts_taken_at ON test_attempts(taken_at)"),
+            ("idx_recommendations_user_id", "CREATE INDEX IF NOT EXISTS idx_recommendations_user_id ON recommendations(user_id)"),
+            ("idx_recommendations_status", "CREATE INDEX IF NOT EXISTS idx_recommendations_status ON recommendations(status)"),
+            ("idx_recommendations_created_at", "CREATE INDEX IF NOT EXISTS idx_recommendations_created_at ON recommendations(created_at)"),
+            ("idx_users_email", "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"),
+            ("idx_users_role", "CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)"),
+            ("idx_courses_course_id", "CREATE INDEX IF NOT EXISTS idx_courses_course_id ON courses(course_id)"),
+        ]
+        
+        for index_name, index_sql in indexes:
+            try:
+                cursor.execute(index_sql)
+                print(f"   ✅ Index {index_name} created")
+            except Exception as e:
+                if "already exists" in str(e):
+                    print(f"   ℹ️  Index {index_name} already exists")
+                else:
+                    print(f"   ⚠️  Error creating index {index_name}: {e}")
+        
+        conn.commit()
+        print("\n✅ Database indexes created successfully!\n")
         
     except Exception as error:
         print(f"❌ Migration failed: {error}")

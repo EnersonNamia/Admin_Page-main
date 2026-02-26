@@ -473,18 +473,18 @@ async def refresh_user_activity(user_id: int):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Update last_login timestamp
-        #current_time = datetime.now(timezone.utc)
-        #execute_query(
-        #    'UPDATE users SET last_login = $1 WHERE user_id = $2',
-        #    [current_time, user_id],
-        #    fetch=False
-        #)
+        # Update last_active timestamp
+        current_time = datetime.now(timezone.utc)
+        execute_query(
+            'UPDATE users SET last_active = $1 WHERE user_id = $2',
+            [current_time, user_id],
+            fetch=False
+        )
         
         return {
             "message": "User activity updated successfully",
             "user_id": user_id,
-        #    "last_active": current_time.isoformat()
+            "last_active": current_time.isoformat()
         }
     except HTTPException:
         raise

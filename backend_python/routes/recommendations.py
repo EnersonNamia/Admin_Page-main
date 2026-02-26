@@ -1010,7 +1010,18 @@ async def get_recommendations_by_status(
             all_recommendations = execute_query(query, [status.lower()])
             count_result = execute_query_one(count_query, [status.lower()])
         
-        # Group recommendations by attempt_id
+        # Helper function to extract match percentage from reasoning field
+        import re
+        def extract_match_percentage(reasoning):
+            """Extract match percentage from reasoning text (e.g., 'Match: 94.0%')"""
+            if not reasoning:
+                return 0.0
+            match = re.search(r'Match:\s*([\d.]+)%', str(reasoning))
+            if match:
+                return float(match.group(1))
+            return 0.0
+        
+        # Group recommendations by attempt_id - collect all first, then sort
         grouped_by_attempt = {}
         for rec in all_recommendations or []:
             attempt_id = rec.get('attempt_id')
@@ -1028,8 +1039,7 @@ async def get_recommendations_by_status(
                     'confidence_score': rec.get('confidence_score'),
                     'traits_found': rec.get('traits_found'),
                     'assessment_date': rec.get('assessment_date'),
-                    'top_recommendation': None,
-                    'other_recommendations': []
+                    'all_recommendations': []  # Collect all recommendations first
                 }
             
             rec_data = {
@@ -1041,16 +1051,32 @@ async def get_recommendations_by_status(
                 'status': rec.get('status') or 'pending',
                 'recommendation_rank': rec.get('recommendation_rank') or 1,
                 'recommended_at': rec.get('recommended_at'),
-                'admin_notes': rec.get('admin_notes')
+                'admin_notes': rec.get('admin_notes'),
+                'match_percentage': extract_match_percentage(rec.get('reasoning'))
             }
             
-            if rec.get('recommendation_rank') == 1 or grouped_by_attempt[attempt_id]['top_recommendation'] is None:
-                if grouped_by_attempt[attempt_id]['top_recommendation'] is None:
-                    grouped_by_attempt[attempt_id]['top_recommendation'] = rec_data
-                else:
-                    grouped_by_attempt[attempt_id]['other_recommendations'].append(rec_data)
+            grouped_by_attempt[attempt_id]['all_recommendations'].append(rec_data)
+        
+        # Sort by match_percentage descending and assign top_recommendation and other_recommendations
+        for attempt_id in grouped_by_attempt:
+            all_recs = grouped_by_attempt[attempt_id]['all_recommendations']
+            # Sort by match percentage descending (highest match first)
+            all_recs.sort(key=lambda x: x.get('match_percentage', 0), reverse=True)
+            
+            # Assign proper ranks based on sorted order
+            for idx, rec in enumerate(all_recs):
+                rec['recommendation_rank'] = idx + 1
+            
+            # First one is top recommendation, rest are other recommendations
+            if all_recs:
+                grouped_by_attempt[attempt_id]['top_recommendation'] = all_recs[0]
+                grouped_by_attempt[attempt_id]['other_recommendations'] = all_recs[1:]
             else:
-                grouped_by_attempt[attempt_id]['other_recommendations'].append(rec_data)
+                grouped_by_attempt[attempt_id]['top_recommendation'] = None
+                grouped_by_attempt[attempt_id]['other_recommendations'] = []
+            
+            # Remove the temporary all_recommendations field
+            del grouped_by_attempt[attempt_id]['all_recommendations']
         
         # Convert to list and paginate
         grouped_list = list(grouped_by_attempt.values())

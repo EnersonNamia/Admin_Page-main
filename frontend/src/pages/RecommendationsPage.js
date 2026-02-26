@@ -132,6 +132,21 @@ function RecommendationsPage() {
         const response = await axios.get(`${API_BASE_URL}/recommendations?page=${page}&limit=${itemsPerPage}`);
         const flatRecs = response.data.recommendations || [];
         
+        // Helper function to extract match percentage from reasoning
+        const extractMatchPercentage = (reasoning) => {
+          if (!reasoning) return 0;
+          const match = reasoning.match(/Match:\s*([\d.]+)%/);
+          return match ? parseFloat(match[1]) : 0;
+        };
+        
+        // Add match_percentage to each rec
+        flatRecs.forEach(rec => {
+          rec.match_percentage = extractMatchPercentage(rec.reasoning);
+        });
+        
+        // Sort by match_percentage descending (highest match first)
+        flatRecs.sort((a, b) => (b.match_percentage || 0) - (a.match_percentage || 0));
+        
         // Transform flat recommendations to grouped format
         const groupedByAttempt = {};
         for (const rec of flatRecs) {
@@ -143,8 +158,7 @@ function RecommendationsPage() {
               user_id: rec.user_id,
               user_name: rec.user_name,
               user_email: rec.user_email,
-              top_recommendation: null,
-              other_recommendations: []
+              all_recommendations: []
             };
           }
           
@@ -155,17 +169,31 @@ function RecommendationsPage() {
             reasoning: rec.reasoning,
             status: rec.status || 'pending',
             recommendation_rank: rec.recommendation_rank || 1,
-            recommended_at: rec.recommended_at
+            recommended_at: rec.recommended_at,
+            match_percentage: rec.match_percentage
           };
           
-          if (groupedByAttempt[attemptId].top_recommendation === null) {
-            groupedByAttempt[attemptId].top_recommendation = recData;
-          } else {
-            groupedByAttempt[attemptId].other_recommendations.push(recData);
-          }
+          groupedByAttempt[attemptId].all_recommendations.push(recData);
         }
         
-        const groupedList = Object.values(groupedByAttempt);
+        // Sort each group by match_percentage and assign top_recommendation/other_recommendations
+        const groupedList = Object.values(groupedByAttempt).map(group => {
+          // Sort by match percentage descending
+          group.all_recommendations.sort((a, b) => (b.match_percentage || 0) - (a.match_percentage || 0));
+          
+          // Assign proper ranks
+          group.all_recommendations.forEach((rec, idx) => {
+            rec.recommendation_rank = idx + 1;
+          });
+          
+          return {
+            ...group,
+            top_recommendation: group.all_recommendations[0] || null,
+            other_recommendations: group.all_recommendations.slice(1),
+            all_recommendations: undefined // Remove temp field
+          };
+        });
+        
         setRecommendations(groupedList);
         
         if (response.data.pagination) {
@@ -841,7 +869,15 @@ function RecommendationsPage() {
                   <tbody>
                     {recommendations.map((assessment) => {
                       const topRec = assessment.top_recommendation;
-                      const otherRecs = assessment.other_recommendations || [];
+                      // Sort other recommendations by match_percentage descending (highest first), fallback to recommendation_rank
+                      const otherRecs = (assessment.other_recommendations || []).slice().sort((a, b) => {
+                        // If match_percentage is available, use it (descending)
+                        if (a.match_percentage !== undefined && b.match_percentage !== undefined) {
+                          return (b.match_percentage || 0) - (a.match_percentage || 0);
+                        }
+                        // Fallback to recommendation_rank (ascending)
+                        return (a.recommendation_rank || 999) - (b.recommendation_rank || 999);
+                      });
                       const isExpanded = expandedRows.includes(assessment.attempt_id);
                       
                       if (!topRec) return null;
