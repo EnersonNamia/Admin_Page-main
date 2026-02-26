@@ -230,9 +230,7 @@ def run_migrations():
         conn.commit()
         print("\n✅ All migrations completed successfully!")
         
-        cursor.close()
-        
-        # Migration: Create performance indexes
+        # Migration: Create performance indexes (create new cursor)
         print("🔄 Creating database indexes for performance...")
         
         indexes = [
@@ -243,23 +241,26 @@ def run_migrations():
             ("idx_test_attempts_taken_at", "CREATE INDEX IF NOT EXISTS idx_test_attempts_taken_at ON test_attempts(taken_at)"),
             ("idx_recommendations_user_id", "CREATE INDEX IF NOT EXISTS idx_recommendations_user_id ON recommendations(user_id)"),
             ("idx_recommendations_status", "CREATE INDEX IF NOT EXISTS idx_recommendations_status ON recommendations(status)"),
-            ("idx_recommendations_created_at", "CREATE INDEX IF NOT EXISTS idx_recommendations_created_at ON recommendations(created_at)"),
+            ("idx_recommendations_recommended_at", "CREATE INDEX IF NOT EXISTS idx_recommendations_recommended_at ON recommendations(recommended_at)"),
             ("idx_users_email", "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"),
-            ("idx_users_role", "CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)"),
             ("idx_courses_course_id", "CREATE INDEX IF NOT EXISTS idx_courses_course_id ON courses(course_id)"),
         ]
         
         for index_name, index_sql in indexes:
             try:
-                cursor.execute(index_sql)
+                index_cursor = conn.cursor()
+                index_cursor.execute(index_sql)
+                conn.commit()
+                index_cursor.close()
                 print(f"   ✅ Index {index_name} created")
             except Exception as e:
+                conn.rollback()
                 if "already exists" in str(e):
                     print(f"   ℹ️  Index {index_name} already exists")
                 else:
                     print(f"   ⚠️  Error creating index {index_name}: {e}")
         
-        conn.commit()
+        cursor.close()
         print("\n✅ Database indexes created successfully!\n")
         
     except Exception as error:

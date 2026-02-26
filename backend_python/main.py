@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
 from models.database import get_db_pool, test_connection, close_all_connections
@@ -25,13 +26,37 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# Create FastAPI app
+# Lifespan context manager (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown"""
+    # Startup
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    try:
+        get_db_pool()
+        if test_connection():
+            print("✅ Backend server started successfully")
+            print(f"   Environment: {os.getenv('ENVIRONMENT', 'development')}")
+            print(f"   CORS enabled for: {', '.join(allowed_origins)}")
+    except Exception as error:
+        print(f"❌ Failed to start server: {error}")
+        raise error
+    
+    yield  # Application runs here
+    
+    # Shutdown
+    close_all_connections()
+    print("✅ Server shutdown complete")
+
+
+# Create FastAPI app with lifespan
 app = FastAPI(
     title="Course Recommendation System API",
     description="Backend API for Course Recommendation System Admin Panel",
     version="1.0.0",
     docs_url="/docs" if os.getenv("ENVIRONMENT") == "development" else None,
     redoc_url="/redoc" if os.getenv("ENVIRONMENT") == "development" else None,
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -55,27 +80,6 @@ app.include_router(tests.router)
 app.include_router(recommendations.router)
 app.include_router(analytics.router)
 app.include_router(feedback.router)
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connection on startup"""
-    try:
-        get_db_pool()
-        if test_connection():
-            print("✅ Backend server started successfully")
-            print(f"   Environment: {os.getenv('ENVIRONMENT', 'development')}")
-            print(f"   CORS enabled for: {', '.join(allowed_origins)}")
-    except Exception as error:
-        print(f"❌ Failed to start server: {error}")
-        raise error
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connections on shutdown"""
-    close_all_connections()
-    print("✅ Server shutdown complete")
 
 # Health check endpoint
 @app.get("/")
