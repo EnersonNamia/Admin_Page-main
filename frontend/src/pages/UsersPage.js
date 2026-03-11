@@ -33,7 +33,7 @@ function UsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/users`);
+      const response = await axios.get(`${API_BASE_URL}/users?limit=100`);
       setUsers(response.data.users || []);
     } catch (err) {
       setError('Failed to load users');
