@@ -64,7 +64,9 @@ function QuestionsPage() {
     { text: '', trait: '' },
     { text: '', trait: '' }
   ]);
+  // eslint-disable-next-line no-unused-vars
   const [availableTraits, setAvailableTraits] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [showAddOptions, setShowAddOptions] = useState(false);
   const [showTraitSelector, setShowTraitSelector] = useState(false);
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(null);
@@ -103,6 +105,7 @@ function QuestionsPage() {
     fetchQuestions();
     fetchTests();
     fetchAvailableTraits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, search, testFilter]);
 
   useEffect(() => {
@@ -149,16 +152,7 @@ function QuestionsPage() {
     }
   };
 
-  const filterQuestions = () => {
-    let filtered = questions;
-    if (search) {
-      filtered = filtered.filter(q =>
-        q.question_text.toLowerCase().includes(search.toLowerCase()) ||
-        q.test_name.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    setFilteredQuestions(filtered);
-  };
+
 
   const handleAddQuestion = async (e) => {
     e.preventDefault();

@@ -47,7 +47,7 @@ class OptionUpdate(BaseModel):
     trait_tag: Optional[str] = None
 
 # Get all tests with pagination and search
-@router.get("/")
+@router.get("")
 async def get_tests(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
@@ -91,7 +91,7 @@ async def get_tests(
         raise HTTPException(status_code=500, detail=f"Failed to fetch tests: {str(error)}")
 
 # Create a new test
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_test(test: TestCreate):
     try:
         result = execute_query_one(
@@ -108,175 +108,7 @@ async def create_test(test: TestCreate):
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to create test: {str(error)}")
 
-# Get test by ID with questions and options
-@router.get("/{test_id}")
-async def get_test(test_id: int):
-    try:
-        test = execute_query_one('SELECT * FROM tests WHERE test_id = $1', [test_id])
-        
-        if not test:
-            raise HTTPException(status_code=404, detail="Test not found")
-        
-        questions = execute_query(
-            'SELECT * FROM questions WHERE test_id = $1 ORDER BY question_order',
-            [test_id]
-        )
-        
-        # Get options for each question
-        questions_with_options = []
-        for question in questions:
-            options = execute_query(
-                'SELECT * FROM options WHERE question_id = $1 ORDER BY option_order',
-                [question['question_id']]
-            )
-            question_dict = dict(question)
-            question_dict['options'] = options
-            questions_with_options.append(question_dict)
-        
-        test_dict = dict(test)
-        test_dict['questions'] = questions_with_options
-        
-        return test_dict
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch test: {str(error)}")
-
-# Delete test
-@router.delete("/{test_id}")
-async def delete_test(test_id: int):
-    try:
-        result = execute_query('DELETE FROM tests WHERE test_id = $1', [test_id], fetch=False)
-        
-        if result == 0:
-            raise HTTPException(status_code=404, detail="Test not found")
-        
-        return {"message": "Test deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to delete test: {str(error)}")
-
-# Update test
-@router.put("/{test_id}")
-async def update_test(test_id: int, test: TestUpdate):
-    try:
-        # Check if test exists
-        existing = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
-        if not existing:
-            raise HTTPException(status_code=404, detail="Test not found")
-        
-        # Build dynamic update query
-        updates = []
-        values = []
-        param_count = 1
-        
-        if test.test_name is not None:
-            updates.append(f"test_name = ${param_count}")
-            values.append(test.test_name)
-            param_count += 1
-        
-        if test.description is not None:
-            updates.append(f"description = ${param_count}")
-            values.append(test.description)
-            param_count += 1
-            
-        if test.test_type is not None:
-            updates.append(f"test_type = ${param_count}")
-            values.append(test.test_type)
-            param_count += 1
-        
-        if not updates:
-            return {"message": "No fields to update"}
-        
-        values.append(test_id)
-        query = f"UPDATE tests SET {', '.join(updates)} WHERE test_id = ${param_count}"
-        
-        execute_query(query, values, fetch=False)
-        
-        return {"message": "Test updated successfully"}
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to update test: {str(error)}")
-
-# Get test attempts for a specific test
-@router.get("/{test_id}/attempts")
-async def get_test_attempts(test_id: int):
-    try:
-        # Verify test exists
-        test = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
-        if not test:
-            raise HTTPException(status_code=404, detail="Test not found")
-        
-        attempts = execute_query("""
-            SELECT 
-                ta.attempt_id,
-                ta.user_id,
-                CONCAT(u.first_name, ' ', u.last_name) as full_name,
-                u.email,
-                ta.score,
-                ta.total_questions,
-                ROUND((ta.score::float / NULLIF(ta.total_questions, 0) * 100)::numeric, 2) as percentage,
-                ta.taken_at as attempt_date,
-                ta.time_taken
-            FROM test_attempts ta
-            JOIN users u ON ta.user_id = u.user_id
-            WHERE ta.test_id = $1
-            ORDER BY ta.taken_at DESC
-        """, [test_id])
-        
-        return {
-            "attempts": attempts,
-            "total_attempts": len(attempts)
-        }
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch test attempts: {str(error)}")
-
-# Submit test attempt (record test results)
-@router.post("/{test_id}/submit", status_code=201)
-async def submit_test_attempt(test_id: int, attempt: TestAttempt):
-    try:
-        # Verify test exists
-        test = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
-        if not test:
-            raise HTTPException(status_code=404, detail="Test not found")
-        
-        # Verify user exists
-        user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [attempt.user_id])
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Insert test attempt into user_test_attempts
-        result = execute_query_one(
-            """INSERT INTO user_test_attempts (user_id, test_id, score, total_questions, time_taken) 
-               VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
-            [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
-        )
-        
-        # Also insert into test_attempts table for tracking total system attempts
-        try:
-            execute_query_one(
-                """INSERT INTO test_attempts (user_id, test_id, score, total_questions, time_taken) 
-                   VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
-                [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
-            )
-        except Exception as e:
-            # Log but don't fail if test_attempts insert fails
-            print(f"Warning: Failed to insert into test_attempts: {str(e)}")
-        
-        return {
-            "message": "Test attempt recorded successfully",
-            "attempt_id": result['attempt_id']
-        }
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to record test attempt: {str(error)}")
-
-# Get all available traits
+# Get all available traits - MUST come before /{test_id} routes
 @router.get("/traits")
 async def get_traits():
     try:
@@ -287,6 +119,7 @@ async def get_traits():
         raise HTTPException(status_code=500, detail=f"Failed to fetch traits: {str(error)}")
 
 # ==================== QUESTION MANAGEMENT ====================
+# Note: These routes MUST come before /{test_id} to avoid path conflicts
 
 # Get all questions with pagination and search
 @router.get("/questions/list/all")
@@ -353,29 +186,6 @@ async def get_questions(
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch questions: {str(error)}")
 
-# Get question with all options
-@router.get("/questions/{question_id}")
-async def get_question(question_id: int):
-    try:
-        question = execute_query_one('SELECT * FROM questions WHERE question_id = $1', [question_id])
-        
-        if not question:
-            raise HTTPException(status_code=404, detail="Question not found")
-        
-        options = execute_query(
-            'SELECT * FROM options WHERE question_id = $1 ORDER BY option_order',
-            [question_id]
-        )
-        
-        question_dict = dict(question)
-        question_dict['options'] = options
-        
-        return question_dict
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch question: {str(error)}")
-
 # Create question
 @router.post("/questions", status_code=201)
 async def create_question(question: QuestionCreate):
@@ -406,6 +216,29 @@ async def create_question(question: QuestionCreate):
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to create question: {str(error)}")
+
+# Get question with all options
+@router.get("/questions/{question_id}")
+async def get_question(question_id: int):
+    try:
+        question = execute_query_one('SELECT * FROM questions WHERE question_id = $1', [question_id])
+        
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        options = execute_query(
+            'SELECT * FROM options WHERE question_id = $1 ORDER BY option_order',
+            [question_id]
+        )
+        
+        question_dict = dict(question)
+        question_dict['options'] = options
+        
+        return question_dict
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch question: {str(error)}")
 
 # Delete question
 @router.delete("/questions/{question_id}")
@@ -577,3 +410,174 @@ async def delete_option(option_id: int):
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to delete option: {str(error)}")
+
+# ==================== TEST ROUTES WITH {test_id} ====================
+# Note: These MUST come after all static routes like /traits, /questions, /options
+
+# Get test by ID with questions and options
+@router.get("/{test_id}")
+async def get_test(test_id: int):
+    try:
+        test = execute_query_one('SELECT * FROM tests WHERE test_id = $1', [test_id])
+        
+        if not test:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        questions = execute_query(
+            'SELECT * FROM questions WHERE test_id = $1 ORDER BY question_order',
+            [test_id]
+        )
+        
+        # Get options for each question
+        questions_with_options = []
+        for question in questions:
+            options = execute_query(
+                'SELECT * FROM options WHERE question_id = $1 ORDER BY option_order',
+                [question['question_id']]
+            )
+            question_dict = dict(question)
+            question_dict['options'] = options
+            questions_with_options.append(question_dict)
+        
+        test_dict = dict(test)
+        test_dict['questions'] = questions_with_options
+        
+        return test_dict
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch test: {str(error)}")
+
+# Delete test
+@router.delete("/{test_id}")
+async def delete_test(test_id: int):
+    try:
+        result = execute_query('DELETE FROM tests WHERE test_id = $1', [test_id], fetch=False)
+        
+        if result == 0:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        return {"message": "Test deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to delete test: {str(error)}")
+
+# Update test
+@router.put("/{test_id}")
+async def update_test(test_id: int, test: TestUpdate):
+    try:
+        # Check if test exists
+        existing = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
+        if not existing:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        # Build dynamic update query
+        updates = []
+        values = []
+        param_count = 1
+        
+        if test.test_name is not None:
+            updates.append(f"test_name = ${param_count}")
+            values.append(test.test_name)
+            param_count += 1
+        
+        if test.description is not None:
+            updates.append(f"description = ${param_count}")
+            values.append(test.description)
+            param_count += 1
+            
+        if test.test_type is not None:
+            updates.append(f"test_type = ${param_count}")
+            values.append(test.test_type)
+            param_count += 1
+        
+        if not updates:
+            return {"message": "No fields to update"}
+        
+        values.append(test_id)
+        query = f"UPDATE tests SET {', '.join(updates)} WHERE test_id = ${param_count}"
+        
+        execute_query(query, values, fetch=False)
+        
+        return {"message": "Test updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to update test: {str(error)}")
+
+# Get test attempts for a specific test
+@router.get("/{test_id}/attempts")
+async def get_test_attempts(test_id: int):
+    try:
+        # Verify test exists
+        test = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
+        if not test:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        attempts = execute_query("""
+            SELECT 
+                ta.attempt_id,
+                ta.user_id,
+                CONCAT(u.first_name, ' ', u.last_name) as full_name,
+                u.email,
+                ta.score,
+                ta.total_questions,
+                ROUND((ta.score::float / NULLIF(ta.total_questions, 0) * 100)::numeric, 2) as percentage,
+                ta.taken_at as attempt_date,
+                ta.time_taken
+            FROM test_attempts ta
+            JOIN users u ON ta.user_id = u.user_id
+            WHERE ta.test_id = $1
+            ORDER BY ta.taken_at DESC
+        """, [test_id])
+        
+        return {
+            "attempts": attempts,
+            "total_attempts": len(attempts)
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch test attempts: {str(error)}")
+
+# Submit test attempt (record test results)
+@router.post("/{test_id}/submit", status_code=201)
+async def submit_test_attempt(test_id: int, attempt: TestAttempt):
+    try:
+        # Verify test exists
+        test = execute_query_one('SELECT test_id FROM tests WHERE test_id = $1', [test_id])
+        if not test:
+            raise HTTPException(status_code=404, detail="Test not found")
+        
+        # Verify user exists
+        user = execute_query_one('SELECT user_id FROM users WHERE user_id = $1', [attempt.user_id])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Insert test attempt into user_test_attempts
+        result = execute_query_one(
+            """INSERT INTO user_test_attempts (user_id, test_id, score, total_questions, time_taken) 
+               VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
+            [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
+        )
+        
+        # Also insert into test_attempts table for tracking total system attempts
+        try:
+            execute_query_one(
+                """INSERT INTO test_attempts (user_id, test_id, score, total_questions, time_taken) 
+                   VALUES ($1, $2, $3, $4, $5) RETURNING attempt_id""",
+                [attempt.user_id, test_id, attempt.score, attempt.total_questions, attempt.time_taken]
+            )
+        except Exception as e:
+            # Log but don't fail if test_attempts insert fails
+            print(f"Warning: Failed to insert into test_attempts: {str(e)}")
+        
+        return {
+            "message": "Test attempt recorded successfully",
+            "attempt_id": result['attempt_id']
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to record test attempt: {str(error)}")

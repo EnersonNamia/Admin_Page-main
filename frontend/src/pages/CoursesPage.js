@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './CoursesPage.css';
 import { useToast } from '../components/Toast';
@@ -65,6 +65,7 @@ function CoursesPage() {
 
   useEffect(() => {
     fetchCourses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, debouncedSearch]);
 
   useEffect(() => {
@@ -92,17 +93,7 @@ function CoursesPage() {
     }
   };
 
-  const filterCourses = () => {
-    let filtered = courses;
-    if (search) {
-      filtered = filtered.filter(c =>
-        c.course_name?.toLowerCase().includes(search.toLowerCase()) ||
-        c.description?.toLowerCase().includes(search.toLowerCase()) ||
-        c.trait_tag?.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    setFilteredCourses(filtered);
-  };
+
 
   const handleAddCourse = async (e) => {
     e.preventDefault();

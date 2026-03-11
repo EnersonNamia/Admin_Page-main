@@ -90,7 +90,7 @@ async def submit_feedback(feedback: FeedbackSubmission):
         raise HTTPException(status_code=500, detail=f"Failed to submit feedback: {str(error)}")
 
 # Get all feedback with pagination
-@router.get("/")
+@router.get("")
 async def get_feedback(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),

@@ -27,7 +27,7 @@ class UserUpdate(BaseModel):
     gwa: Optional[float] = Field(None, ge=75, le=100)
 
 # Get all users with pagination and search
-@router.get("/")
+@router.get("")
 async def get_users(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
@@ -127,7 +127,7 @@ async def get_user(user_id: int):
         raise HTTPException(status_code=500, detail=f"Failed to fetch user: {str(error)}")
 
 # Create new user
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_user(user: UserCreate):
     try:
         # Parse full_name if provided

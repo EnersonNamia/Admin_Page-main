@@ -21,11 +21,10 @@ function Dashboard() {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const [users, courses, analytics, recs] = await Promise.all([
+      const [users, courses, analytics] = await Promise.all([
         axios.get(`${API_BASE_URL}/users?limit=1`).catch(() => ({ data: { pagination: { total: 0 } } })),
         axios.get(`${API_BASE_URL}/courses?limit=1`).catch(() => ({ data: { pagination: { total: 0 } } })),
         axios.get(`${API_BASE_URL}/analytics/admin/overview`).catch(() => ({ data: { overview: { total_assessments_taken: 0 } } })),
-        axios.get(`${API_BASE_URL}/recommendations?limit=1`).catch(() => ({ data: { pagination: { total: 0 } } })),
       ]);
 
       setStats({

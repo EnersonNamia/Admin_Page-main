@@ -22,7 +22,7 @@ class CourseUpdate(BaseModel):
     trait_tag: Optional[str] = None
 
 # Get all courses with pagination and search
-@router.get("/")
+@router.get("")
 async def get_courses(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
@@ -90,7 +90,7 @@ async def get_course(course_id: int):
         raise HTTPException(status_code=500, detail=f"Failed to fetch course: {str(error)}")
 
 # Create new course
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_course(course: CourseCreate):
     try:
         result = execute_query_one(

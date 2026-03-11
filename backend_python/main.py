@@ -57,6 +57,7 @@ app = FastAPI(
     docs_url="/docs" if os.getenv("ENVIRONMENT") == "development" else None,
     redoc_url="/redoc" if os.getenv("ENVIRONMENT") == "development" else None,
     lifespan=lifespan,
+    redirect_slashes=False,  # Prevent 307 redirects for trailing slashes
 )
 
 # Configure CORS

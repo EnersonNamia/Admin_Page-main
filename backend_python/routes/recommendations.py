@@ -319,7 +319,7 @@ class RecommendationUpdate(BaseModel):
     admin_notes: Optional[str] = None
 
 # Get all recommendations with pagination and filtering
-@router.get("/")
+@router.get("")
 async def get_recommendations(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),

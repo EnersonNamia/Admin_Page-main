@@ -49,10 +49,14 @@ function RecommendationsPage() {
   // Expanded rows state (for showing other 4 recommendations)
   const [expandedRows, setExpandedRows] = useState([]);
   
-  // Generate recommendations state
+  // Generate recommendations state (reserved for future use)
+  // eslint-disable-next-line no-unused-vars
   const [generating, setGenerating] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [generateResult, setGenerateResult] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [generateOptions, setGenerateOptions] = useState({
     overwrite_existing: false
   });
@@ -92,10 +96,12 @@ function RecommendationsPage() {
 
   useEffect(() => {
     setCurrentPage(1); // Reset to first page when filter changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   useEffect(() => {
     fetchRecommendations(currentPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter]);
 
   // Clear selections and expanded rows when filter or page changes
@@ -557,6 +563,7 @@ function RecommendationsPage() {
     return parts.length > 0 ? parts.join(' AND ') : 'No conditions set';
   };
 
+  // eslint-disable-next-line no-unused-vars
   const updateStatus = async (recId, newStatus) => {
     try {
       await axios.put(`${API_BASE_URL}/recommendations/${recId}/status`, { status: newStatus });
@@ -576,6 +583,7 @@ function RecommendationsPage() {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getStatusColor = (status) => {
     switch(status) {
       case 'approved': return '#22c55e';
@@ -586,6 +594,7 @@ function RecommendationsPage() {
   };
 
   // Generate Recommendations
+  // eslint-disable-next-line no-unused-vars
   const handleGenerateRecommendations = async () => {
     setGenerating(true);
     setGenerateResult(null);
