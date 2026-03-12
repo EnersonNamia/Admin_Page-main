@@ -2,8 +2,29 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './QuestionsPage.css';
 import { useToast } from '../components/Toast';
+import cacheManager, { CACHE_TTL } from '../utils/cache';
 
 const API_BASE_URL = 'http://localhost:5000/api';
+
+// CoursePro production backend URL - for cache invalidation
+const PRODUCTION_API_URL = process.env.REACT_APP_PRODUCTION_API_URL || '';
+
+// Helper function to invalidate production cache after question/option changes
+const invalidateProductionCache = async () => {
+  if (!PRODUCTION_API_URL) {
+    console.log('[Cache] No production URL configured, skipping production cache invalidation');
+    return;
+  }
+  try {
+    await axios.post(`${PRODUCTION_API_URL}/admin/cache/invalidate`, {}, {
+      timeout: 5000 // 5 second timeout
+    });
+    console.log('[Cache] Production cache invalidated successfully');
+  } catch (err) {
+    console.warn('[Cache] Failed to invalidate production cache:', err.message);
+    // Don't throw - this is a best-effort operation
+  }
+};
 
 function QuestionsPage() {
   const toast = useToast();
@@ -113,8 +134,20 @@ function QuestionsPage() {
     setFilteredQuestions(questions);
   }, [questions]);
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (forceRefresh = false) => {
+    const cacheKey = `questions_${page}_${pageSize}_${testFilter}_${search}`;
     try {
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = cacheManager.get(cacheKey);
+        if (cachedData) {
+          setQuestionsData(cachedData.questions);
+          setTotalPages(cachedData.totalPages);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/tests/questions/list/all`, {
         params: {
@@ -125,8 +158,14 @@ function QuestionsPage() {
         }
       });
       console.log('Fetched questions:', response.data);
-      setQuestionsData(response.data.questions || []);
-      setTotalPages(response.data.pagination.pages || 1);
+      const questionsData = response.data.questions || [];
+      const pages = response.data.pagination.pages || 1;
+      
+      // Cache the result
+      cacheManager.set(cacheKey, { questions: questionsData, totalPages: pages }, CACHE_TTL.SHORT);
+      
+      setQuestionsData(questionsData);
+      setTotalPages(pages);
     } catch (err) {
       setError('Failed to load questions');
     } finally {
@@ -135,9 +174,21 @@ function QuestionsPage() {
   };
 
   const fetchTests = async () => {
+    const cacheKey = 'questions_page_tests';
     try {
+      // Check cache first
+      const cachedTests = cacheManager.get(cacheKey);
+      if (cachedTests) {
+        setTests(cachedTests);
+        return;
+      }
+
       const response = await axios.get(`${API_BASE_URL}/tests?limit=100`);
-      setTests(response.data.tests || []);
+      const testsData = response.data.tests || [];
+      
+      // Cache the tests
+      cacheManager.set(cacheKey, testsData, CACHE_TTL.MEDIUM);
+      setTests(testsData);
     } catch (err) {
       console.error('Failed to load tests');
     }
@@ -229,7 +280,9 @@ function QuestionsPage() {
       ]);
       setShowModal(false);
       setError('');
-      fetchQuestions();
+      cacheManager.invalidate(/^questions_/);
+      fetchQuestions(true);
+      await invalidateProductionCache(); // Notify CoursePro to refresh
       toast.success('Question created successfully!');
     } catch (err) {
       const errorMsg = err.response?.data?.detail || err.response?.data?.message || err.message || 'Failed to add question';
@@ -243,7 +296,9 @@ function QuestionsPage() {
     if (!window.confirm('Are you sure you want to delete this question and all its options?')) return;
     try {
       await axios.delete(`${API_BASE_URL}/tests/questions/${questionId}`);
-      fetchQuestions();
+      cacheManager.invalidate(/^questions_/);
+      fetchQuestions(true);
+      await invalidateProductionCache(); // Notify CoursePro to refresh
       setShowDetailModal(false);
     } catch (err) {
       setError('Failed to delete question');
@@ -264,7 +319,9 @@ function QuestionsPage() {
       setDeleteModal(false);
       setDeleteTarget(null);
       setShowDetailModal(false);
-      fetchQuestions();
+      cacheManager.invalidate(/^questions_/);
+      fetchQuestions(true);
+      await invalidateProductionCache(); // Notify CoursePro to refresh
       toast.success('Question deleted successfully!');
     } catch (err) {
       toast.error('Failed to delete question');
@@ -279,6 +336,8 @@ function QuestionsPage() {
       question_id: question.question_id,
       question_text: question.question_text || '',
       question_order: question.question_order || 1,
+      category: question.category || '',
+      test_id: question.test_id,
     });
     setEditOptions([]);
     setEditOptionsLoading(true);
@@ -305,32 +364,75 @@ function QuestionsPage() {
     });
   };
 
+  // Add new option in edit mode
+  const addEditOption = () => {
+    setEditOptions([...editOptions, { option_id: `new_${Date.now()}`, option_text: '', trait_tag: '', isNew: true }]);
+  };
+
+  // Remove option in edit mode
+  const removeEditOption = async (index) => {
+    const option = editOptions[index];
+    if (option.isNew) {
+      // Just remove from local state
+      setEditOptions(editOptions.filter((_, i) => i !== index));
+    } else {
+      // Delete from database
+      try {
+        await axios.delete(`${API_BASE_URL}/tests/options/${option.option_id}`);
+        setEditOptions(editOptions.filter((_, i) => i !== index));
+        await invalidateProductionCache(); // Notify CoursePro to refresh
+        toast.success('Option deleted');
+      } catch (err) {
+        toast.error('Failed to delete option');
+      }
+    }
+  };
+
   // Submit edit
   const handleEditQuestion = async () => {
     if (!editData) return;
     try {
-      // Update question text
+      // Update question text, order, and category
       const updatePayload = {
         question_text: editData.question_text,
         question_order: editData.question_order,
+        category: editData.category,
       };
       console.log('Updating question with payload:', updatePayload);
       await axios.put(`${API_BASE_URL}/tests/questions/${editData.question_id}`, updatePayload);
       
-      // Update each option
+      // Update existing options and create new ones
+      let newOptionsCreated = 0;
+      let optionsUpdated = 0;
+      
       for (const option of editOptions) {
-        await axios.put(`${API_BASE_URL}/tests/options/${option.option_id}`, {
-          option_text: option.option_text,
-          trait_tag: option.trait_tag
-        });
+        if (option.isNew) {
+          // Create new option
+          console.log('Creating new option:', option);
+          const response = await axios.post(`${API_BASE_URL}/tests/questions/${editData.question_id}/options`, {
+            option_text: option.option_text,
+            trait: option.trait_tag
+          });
+          console.log('New option created:', response.data);
+          newOptionsCreated++;
+        } else {
+          // Update existing option
+          await axios.put(`${API_BASE_URL}/tests/options/${option.option_id}`, {
+            option_text: option.option_text,
+            trait_tag: option.trait_tag
+          });
+          optionsUpdated++;
+        }
       }
       
-      console.log('Question and options updated successfully');
+      console.log(`Question updated. Options: ${optionsUpdated} updated, ${newOptionsCreated} created`);
       setEditModal(false);
       setEditData(null);
       setEditOptions([]);
-      fetchQuestions();
-      toast.success('Question updated successfully!');
+      cacheManager.invalidate(/^questions_/);
+      fetchQuestions(true);
+      await invalidateProductionCache(); // Notify CoursePro to refresh
+      toast.success(`Question updated! ${newOptionsCreated > 0 ? `${newOptionsCreated} new option(s) added.` : ''}`);
     } catch (err) {
       console.error('Update failed:', err.response?.data || err.message);
       toast.error(err.response?.data?.detail || 'Failed to update question');
@@ -1203,7 +1305,7 @@ function QuestionsPage() {
               </div>
 
               {/* Question Order */}
-              <div style={{ marginBottom: '25px' }}>
+              <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
                   Question Order
                 </label>
@@ -1224,12 +1326,61 @@ function QuestionsPage() {
                 />
               </div>
 
+              {/* Question Category */}
+              <div style={{ marginBottom: '25px' }}>
+                <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
+                  Question Category
+                </label>
+                <select
+                  value={editData.category || ''}
+                  onChange={(e) => setEditData({ ...editData, category: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: '#fff',
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="" style={{ background: '#1a1a2e' }}>Select category...</option>
+                  {Object.entries({...questionCategoryGroups, ...dynamicCategories}).map(([group, categories]) => (
+                    <optgroup key={group} label={group} style={{ background: '#1a1a2e' }}>
+                      {categories.map(cat => (
+                        <option key={cat} value={cat} style={{ background: '#1a1a2e' }}>{cat}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
               {/* Options Section */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '12px', fontSize: '14px' }}>
-                  <i className="fas fa-list" style={{ marginRight: '8px' }}></i>
-                  Answer Options & Trait Tags
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <label style={{ color: '#a0a0a0', fontSize: '14px' }}>
+                    <i className="fas fa-list" style={{ marginRight: '8px' }}></i>
+                    Answer Options & Trait Tags
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addEditOption}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    <i className="fas fa-plus" style={{ marginRight: '6px' }}></i>
+                    Add Option
+                  </button>
+                </div>
                 
                 {editOptionsLoading ? (
                   <div style={{ textAlign: 'center', padding: '20px', color: '#a0a0a0' }}>
@@ -1238,23 +1389,23 @@ function QuestionsPage() {
                   </div>
                 ) : editOptions.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '20px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                    No options found for this question
+                    No options yet. Click "Add Option" to create one.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
                     {editOptions.map((option, index) => (
                       <div key={option.option_id} style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 200px',
+                        gridTemplateColumns: '1fr 180px 40px',
                         gap: '12px',
                         padding: '15px',
-                        background: 'rgba(255, 255, 255, 0.05)',
+                        background: option.isNew ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 255, 255, 0.05)',
                         borderRadius: '10px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                        border: option.isNew ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)'
                       }}>
                         <div>
                           <label style={{ display: 'block', color: '#6b7280', marginBottom: '6px', fontSize: '12px' }}>
-                            Option {index + 1}
+                            Option {index + 1} {option.isNew && <span style={{ color: '#4CAF50' }}>(new)</span>}
                           </label>
                           <input
                             type="text"
@@ -1302,6 +1453,35 @@ function QuestionsPage() {
                               <i className="fas fa-chevron-down" style={{ fontSize: '10px' }}></i>
                             </button>
                           </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>
+                          <button
+                            type="button"
+                            onClick={() => removeEditOption(index)}
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.2)',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = 'rgba(239, 68, 68, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+                            }}
+                            title="Delete option"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
                         </div>
                       </div>
                     ))}

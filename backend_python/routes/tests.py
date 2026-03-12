@@ -1,10 +1,44 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
 import math
+import os
+import httpx
 from models.database import execute_query, execute_query_one
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/tests", tags=["tests"])
+
+# Production CoursePro backend URL for cache invalidation
+PRODUCTION_API_URL = os.getenv('PRODUCTION_API_URL', '')
+
+async def invalidate_production_cache():
+    """
+    Call CoursePro production backend to invalidate its adaptive engine cache.
+    This ensures that question/option changes made in Admin Panel are reflected immediately.
+    """
+    if not PRODUCTION_API_URL:
+        print("[Cache] No PRODUCTION_API_URL configured, skipping production cache invalidation")
+        return
+    
+    cache_key = os.getenv('CACHE_INVALIDATION_KEY', '')
+    if not cache_key:
+        print("[Cache] No CACHE_INVALIDATION_KEY configured, skipping cache invalidation")
+        return
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Call the public cache invalidation endpoint with API key
+            response = await client.post(
+                f"{PRODUCTION_API_URL}/cache/invalidate",
+                params={"api_key": cache_key}
+            )
+            if response.status_code == 200:
+                print(f"[Cache] Production cache invalidated successfully")
+            else:
+                print(f"[Cache] Production cache invalidation returned status {response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"[Cache] Failed to invalidate production cache: {e}")
+        # Don't raise - this is a best-effort operation
 
 # Pydantic models
 class TestAttempt(BaseModel):
@@ -195,19 +229,14 @@ async def create_question(question: QuestionCreate):
         if not test:
             raise HTTPException(status_code=404, detail="Test not found")
         
-        # Auto-calculate the next question_order globally across ALL questions
-        max_order_result = execute_query_one(
-            'SELECT COALESCE(MAX(question_order), 0) as max_order FROM questions',
-            []
-        )
-        next_order = int(max_order_result['max_order']) + 1
-        
+        # Always set question_order to 1 for new questions
         result = execute_query_one(
             """INSERT INTO questions (test_id, question_text, question_order, question_type, category)
                VALUES ($1, $2, $3, $4, $5) RETURNING question_id""",
-            [question.test_id, question.question_text, next_order, question.question_type, question.category]
+            [question.test_id, question.question_text, 1, question.question_type, question.category]
         )
         
+        await invalidate_production_cache()  # Notify CoursePro to refresh
         return {
             "message": "Question created successfully",
             "question_id": result['question_id']
@@ -253,6 +282,7 @@ async def delete_question(question_id: int):
         if result == 0:
             raise HTTPException(status_code=404, detail="Question not found")
         
+        await invalidate_production_cache()  # Notify CoursePro to refresh
         return {"message": "Question deleted successfully"}
     except HTTPException:
         raise
@@ -301,6 +331,7 @@ async def update_question(question_id: int, question: QuestionUpdate):
         
         execute_query(query, values, fetch=False)
         
+        await invalidate_production_cache()  # Notify CoursePro to refresh
         return {"message": "Question updated successfully"}
     except HTTPException:
         raise
@@ -329,6 +360,7 @@ async def create_option(question_id: int, option: OptionCreate):
             [question_id, option.option_text, option.trait or None, 1, next_order]
         )
         
+        await invalidate_production_cache()  # Notify CoursePro to refresh
         return {
             "message": "Option created successfully",
             "option_id": result['option_id']
@@ -390,6 +422,7 @@ async def update_option(option_id: int, option: OptionUpdate):
         
         execute_query(query, values, fetch=False)
         
+        await invalidate_production_cache()  # Notify CoursePro to refresh
         return {"message": "Option updated successfully"}
     except HTTPException:
         raise
@@ -405,6 +438,7 @@ async def delete_option(option_id: int):
         if result == 0:
             raise HTTPException(status_code=404, detail="Option not found")
         
+        await invalidate_production_cache()  # Notify CoursePro to refresh
         return {"message": "Option deleted successfully"}
     except HTTPException:
         raise

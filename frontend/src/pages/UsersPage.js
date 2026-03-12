@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './UsersPage.css';
 import { useToast } from '../components/Toast';
+import cacheManager, { CACHE_TTL } from '../utils/cache';
 
 const API_BASE_URL = 'http://localhost:5000/api';
+const CACHE_KEY = 'users_list';
 
 function UsersPage() {
   const toast = useToast();
@@ -30,11 +32,25 @@ function UsersPage() {
     filterUsers();
   }, [users, search, strandFilter, statusFilter]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (forceRefresh = false) => {
     try {
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedUsers = cacheManager.get(CACHE_KEY);
+        if (cachedUsers) {
+          setUsers(cachedUsers);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/users?limit=100`);
-      setUsers(response.data.users || []);
+      const userData = response.data.users || [];
+      
+      // Cache the users
+      cacheManager.set(CACHE_KEY, userData, CACHE_TTL.SHORT);
+      setUsers(userData);
     } catch (err) {
       setError('Failed to load users');
     } finally {
@@ -76,7 +92,8 @@ function UsersPage() {
     if (!deleteTarget) return;
     try {
       await axios.delete(`${API_BASE_URL}/users/${deleteTarget.user_id}`);
-      fetchUsers();
+      cacheManager.invalidate(CACHE_KEY);
+      fetchUsers(true);
       setDeleteModal(false);
       setDeleteTarget(null);
       toast.success('User deleted successfully!');
@@ -108,7 +125,8 @@ function UsersPage() {
       await axios.patch(`${API_BASE_URL}/users/${userId}/status`, {
         is_active: !currentStatus
       });
-      fetchUsers();
+      cacheManager.invalidate(CACHE_KEY);
+      fetchUsers(true);
       setShowDetailModal(false);
     } catch (err) {
       setError('Failed to update user status');

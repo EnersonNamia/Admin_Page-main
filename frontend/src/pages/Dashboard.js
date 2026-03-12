@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Dashboard.css';
+import cacheManager, { CACHE_TTL } from '../utils/cache';
 
 const API_BASE_URL = 'http://localhost:5000/api';
+const CACHE_KEY = 'dashboard_stats';
 
 function Dashboard() {
   const [stats, setStats] = useState({
@@ -20,6 +22,14 @@ function Dashboard() {
 
   const fetchStats = async () => {
     try {
+      // Check cache first
+      const cachedStats = cacheManager.get(CACHE_KEY);
+      if (cachedStats) {
+        setStats(cachedStats);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const [users, courses, analytics] = await Promise.all([
         axios.get(`${API_BASE_URL}/users?limit=1`).catch(() => ({ data: { pagination: { total: 0 } } })),
@@ -27,12 +37,16 @@ function Dashboard() {
         axios.get(`${API_BASE_URL}/analytics/admin/overview`).catch(() => ({ data: { overview: { total_assessments_taken: 0 } } })),
       ]);
 
-      setStats({
+      const newStats = {
         totalUsers: users.data?.pagination?.total || 0,
         totalCourses: courses.data?.pagination?.total || 0,
         totalTests: analytics.data?.overview?.total_assessments_taken || 0,
         totalRecommendations: analytics.data?.overview?.total_recommendations_generated || 0,
-      });
+      };
+      
+      // Cache the stats
+      cacheManager.set(CACHE_KEY, newStats, CACHE_TTL.MEDIUM);
+      setStats(newStats);
     } catch (err) {
       setError('Failed to load statistics');
     } finally {

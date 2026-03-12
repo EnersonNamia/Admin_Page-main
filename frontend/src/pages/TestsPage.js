@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useToast } from '../components/Toast';
+import cacheManager, { CACHE_TTL } from '../utils/cache';
 
 const API_BASE_URL = 'http://localhost:5000/api';
+const CACHE_KEY = 'tests_list';
 
 function TestsPage() {
   const toast = useToast();
@@ -20,11 +22,25 @@ function TestsPage() {
     fetchTests();
   }, []);
 
-  const fetchTests = async () => {
+  const fetchTests = async (forceRefresh = false) => {
     try {
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedTests = cacheManager.get(CACHE_KEY);
+        if (cachedTests) {
+          setTests(cachedTests);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/tests`);
-      setTests(response.data.tests || []);
+      const testsData = response.data.tests || [];
+      
+      // Cache the tests
+      cacheManager.set(CACHE_KEY, testsData, CACHE_TTL.MEDIUM);
+      setTests(testsData);
     } catch (err) {
       setError('Failed to load tests');
     } finally {
@@ -38,7 +54,8 @@ function TestsPage() {
       await axios.post(`${API_BASE_URL}/tests`, formData);
       setFormData({ test_name: '', description: '' });
       setShowModal(false);
-      fetchTests();
+      cacheManager.invalidate(CACHE_KEY);
+      fetchTests(true);
       toast.success('Test created successfully!');
     } catch (err) {
       toast.error('Failed to add test');
@@ -65,7 +82,8 @@ function TestsPage() {
       });
       setEditModal(false);
       setEditData(null);
-      fetchTests();
+      cacheManager.invalidate(CACHE_KEY);
+      fetchTests(true);
       toast.success('Test updated successfully!');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to update test');
@@ -85,7 +103,8 @@ function TestsPage() {
       await axios.delete(`${API_BASE_URL}/tests/${deleteTarget.test_id}`);
       setDeleteModal(false);
       setDeleteTarget(null);
-      fetchTests();
+      cacheManager.invalidate(CACHE_KEY);
+      fetchTests(true);
       toast.success('Test deleted successfully!');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete test');

@@ -227,6 +227,35 @@ def run_migrations():
         else:
             print("   ✅ created_at column already exists")
 
+        # Migration 13: Add option_order column to options table
+        print("🔄 Checking for option_order column in options...")
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='options' AND column_name='option_order'
+        """)
+        
+        if not cursor.fetchone():
+            print("   Adding option_order column...")
+            cursor.execute("""
+                ALTER TABLE options 
+                ADD COLUMN option_order INTEGER DEFAULT 1
+            """)
+            # Update existing options with sequential order per question
+            cursor.execute("""
+                WITH numbered AS (
+                    SELECT option_id,
+                           ROW_NUMBER() OVER (PARTITION BY question_id ORDER BY option_id) as rn
+                    FROM options
+                )
+                UPDATE options o
+                SET option_order = numbered.rn
+                FROM numbered
+                WHERE o.option_id = numbered.option_id
+            """)
+            print("   ✅ option_order column added and existing data updated")
+        else:
+            print("   ✅ option_order column already exists")
+
         conn.commit()
         print("\n✅ All migrations completed successfully!")
         

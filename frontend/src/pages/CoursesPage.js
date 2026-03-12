@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './CoursesPage.css';
 import { useToast } from '../components/Toast';
+import cacheManager, { CACHE_TTL } from '../utils/cache';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -73,8 +74,20 @@ function CoursesPage() {
     setFilteredCourses(courses);
   }, [courses]);
 
-  const fetchCourses = async () => {
+  const fetchCourses = async (forceRefresh = false) => {
+    const cacheKey = `courses_${page}_${pageSize}_${debouncedSearch}`;
     try {
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = cacheManager.get(cacheKey);
+        if (cachedData) {
+          setCoursesData(cachedData.courses);
+          setTotalPages(cachedData.totalPages);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/courses`, {
         params: {
@@ -84,8 +97,14 @@ function CoursesPage() {
         }
       });
       console.log('Fetched courses:', response.data);
-      setCoursesData(response.data.courses || []);
-      setTotalPages(response.data.pagination.pages || 1);
+      const coursesData = response.data.courses || [];
+      const pages = response.data.pagination.pages || 1;
+      
+      // Cache the result
+      cacheManager.set(cacheKey, { courses: coursesData, totalPages: pages }, CACHE_TTL.MEDIUM);
+      
+      setCoursesData(coursesData);
+      setTotalPages(pages);
     } catch (err) {
       setError('Failed to load courses');
     } finally {
@@ -113,7 +132,8 @@ function CoursesPage() {
       });
       setFormData({ course_name: '', description: '', required_strand: '', minimum_gwa: '', trait_tag: '' });
       setShowModal(false);
-      fetchCourses();
+      cacheManager.invalidate(/^courses_/);
+      fetchCourses(true);
       toast.success('Course added successfully!');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to add course');
@@ -133,7 +153,8 @@ function CoursesPage() {
       await axios.delete(`${API_BASE_URL}/courses/${deleteTarget.course_id}`);
       setDeleteModal(false);
       setDeleteTarget(null);
-      fetchCourses();
+      cacheManager.invalidate(/^courses_/);
+      fetchCourses(true);
       toast.success('Course deleted successfully!');
     } catch (err) {
       toast.error('Failed to delete course');
@@ -177,7 +198,8 @@ function CoursesPage() {
       console.log('Update response:', response.data);
       setEditModal(false);
       setEditData(null);
-      fetchCourses();
+      cacheManager.invalidate(/^courses_/);
+      fetchCourses(true);
       toast.success('Course updated successfully!');
     } catch (err) {
       console.error('Update failed:', err.response?.data || err.message);
