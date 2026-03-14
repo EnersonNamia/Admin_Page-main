@@ -170,6 +170,21 @@ async def update_course(course_id: int, course: CourseUpdate):
 @router.delete("/{course_id}")
 async def delete_course(course_id: int):
     try:
+        # First check if course exists
+        course = execute_query_one('SELECT course_id FROM courses WHERE course_id = $1', [course_id])
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Delete related recommendations first (foreign key constraint)
+        execute_query('DELETE FROM recommendations WHERE course_id = $1', [course_id], fetch=False)
+        
+        # Delete related recommendation_rules if table exists
+        try:
+            execute_query('DELETE FROM recommendation_rules WHERE recommended_course_id = $1', [course_id], fetch=False)
+        except Exception:
+            pass  # Table might not exist yet
+        
+        # Now delete the course
         result = execute_query('DELETE FROM courses WHERE course_id = $1', [course_id], fetch=False)
         
         if result == 0:

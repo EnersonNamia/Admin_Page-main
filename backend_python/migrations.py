@@ -256,6 +256,77 @@ def run_migrations():
         else:
             print("   ✅ option_order column already exists")
 
+        # Migration 14: Create recommendation_rules table if it doesn't exist
+        print("🔄 Checking for recommendation_rules table...")
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'recommendation_rules'
+            )
+        """)
+        
+        if not cursor.fetchone()[0]:
+            print("   Creating recommendation_rules table...")
+            cursor.execute("""
+                CREATE TABLE recommendation_rules (
+                    rule_id SERIAL PRIMARY KEY,
+                    rule_name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    condition_type VARCHAR(50) NOT NULL,
+                    gwa_min DECIMAL(5,2),
+                    gwa_max DECIMAL(5,2),
+                    strand VARCHAR(50),
+                    trait_tag VARCHAR(100),
+                    trait_min_score INTEGER,
+                    assessment_min_score INTEGER,
+                    assessment_max_score INTEGER,
+                    recommended_course_id INTEGER REFERENCES courses(course_id) ON DELETE CASCADE,
+                    priority INTEGER DEFAULT 0,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            print("   ✅ recommendation_rules table created")
+        else:
+            print("   ✅ recommendation_rules table already exists")
+
+        # Migration 15: Add ON DELETE CASCADE to recommendations.course_id if not already set
+        print("🔄 Updating foreign key constraints for recommendations table...")
+        try:
+            # Check if the constraint exists and recreate it with CASCADE
+            cursor.execute("""
+                SELECT conname FROM pg_constraint 
+                WHERE conrelid = 'recommendations'::regclass 
+                AND contype = 'f' 
+                AND confrelid = 'courses'::regclass
+            """)
+            existing_fk = cursor.fetchone()
+            
+            if existing_fk:
+                # Drop the existing constraint and recreate with CASCADE
+                cursor.execute(f"""
+                    ALTER TABLE recommendations 
+                    DROP CONSTRAINT IF EXISTS {existing_fk[0]}
+                """)
+                cursor.execute("""
+                    ALTER TABLE recommendations 
+                    ADD CONSTRAINT recommendations_course_id_fkey 
+                    FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE
+                """)
+                print("   ✅ Foreign key constraint updated with CASCADE")
+            else:
+                # Add the constraint with CASCADE if it doesn't exist
+                cursor.execute("""
+                    ALTER TABLE recommendations 
+                    ADD CONSTRAINT recommendations_course_id_fkey 
+                    FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE
+                """)
+                print("   ✅ Foreign key constraint added with CASCADE")
+        except Exception as fk_error:
+            print(f"   ⚠️  Could not update foreign key constraint: {fk_error}")
+            # This is non-fatal, continue with other migrations
+
         conn.commit()
         print("\n✅ All migrations completed successfully!")
         
