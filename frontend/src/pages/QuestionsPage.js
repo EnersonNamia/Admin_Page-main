@@ -33,6 +33,7 @@ function QuestionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [testFilter, setTestFilter] = useState('');
   const [tests, setTests] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -122,12 +123,21 @@ function QuestionsPage() {
     'Outdoor': ['Field-work', 'Outdoor-enthusiast', 'Active', 'Adventurous', 'Nature-focused', 'Physical-fitness', 'Exploratory', 'Hands-on', 'Practical']
   };
 
+  // Debounce search input - wait 300ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); // Reset to page 1 when search changes
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useEffect(() => {
     fetchQuestions();
     fetchTests();
     fetchAvailableTraits();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, search, testFilter]);
+  }, [page, pageSize, debouncedSearch, testFilter]);
 
   useEffect(() => {
     // Server-side filtering is now used, just pass through
@@ -135,7 +145,7 @@ function QuestionsPage() {
   }, [questions]);
 
   const fetchQuestions = async (forceRefresh = false) => {
-    const cacheKey = `questions_${page}_${pageSize}_${testFilter}_${search}`;
+    const cacheKey = `questions_${page}_${pageSize}_${testFilter}_${debouncedSearch}`;
     try {
       // Check cache first (unless force refresh)
       if (!forceRefresh) {
@@ -154,7 +164,7 @@ function QuestionsPage() {
           page: page,
           limit: pageSize,
           test_id: testFilter || undefined,
-          search: search || undefined  // Server-side search
+          search: debouncedSearch || undefined  // Server-side search
         }
       });
       console.log('Fetched questions:', response.data);

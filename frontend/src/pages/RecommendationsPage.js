@@ -309,18 +309,64 @@ function RecommendationsPage() {
     }
   };
 
-  // Quick status change from table
+  // Quick status change from table - with optimistic updates for instant feedback
   const handleQuickStatusChange = async (recId, newStatus) => {
+    // Find the recommendation and its old status for stats update
+    let oldStatus = null;
+    let attemptId = null;
+    
+    // Optimistically update the UI immediately
+    setRecommendations(prev => prev.map(group => {
+      // Check if this group contains the recommendation
+      if (group.top_recommendation?.recommendation_id === recId) {
+        oldStatus = group.top_recommendation.status || 'pending';
+        attemptId = group.attempt_id;
+        return {
+          ...group,
+          top_recommendation: { ...group.top_recommendation, status: newStatus },
+          other_recommendations: group.other_recommendations?.map(rec => ({
+            ...rec,
+            status: newStatus
+          })) || []
+        };
+      }
+      // Also check other_recommendations
+      const otherMatch = group.other_recommendations?.find(r => r.recommendation_id === recId);
+      if (otherMatch) {
+        oldStatus = otherMatch.status || 'pending';
+        attemptId = group.attempt_id;
+        return {
+          ...group,
+          top_recommendation: group.top_recommendation ? { ...group.top_recommendation, status: newStatus } : null,
+          other_recommendations: group.other_recommendations?.map(rec => ({
+            ...rec,
+            status: newStatus
+          })) || []
+        };
+      }
+      return group;
+    }));
+
+    // Optimistically update stats
+    if (oldStatus && oldStatus !== newStatus) {
+      setStatusStats(prev => ({
+        ...prev,
+        [oldStatus]: Math.max(0, (prev[oldStatus] || 0) - 1),
+        [newStatus]: (prev[newStatus] || 0) + 1
+      }));
+    }
+
     try {
       await axios.put(`${API_BASE_URL}/recommendations/edit/${recId}`, {
         status: newStatus
       });
-      fetchRecommendations();
+      // Refresh stats in background without blocking
       fetchStatusStats();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update status');
-      // Refresh to reset the dropdown if it failed
+      // Revert optimistic updates on error
       fetchRecommendations();
+      fetchStatusStats();
     }
   };
 

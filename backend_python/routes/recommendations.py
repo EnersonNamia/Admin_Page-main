@@ -955,61 +955,6 @@ async def get_recommendations_by_status(
         
         offset = (page - 1) * limit
         
-        # Base query includes recommendation_rank
-        if status.lower() == 'all':
-            query = """
-                SELECT 
-                    r.*,
-                    r.recommendation_rank,
-                    CONCAT(u.first_name, ' ', u.last_name) as user_name,
-                    u.email as user_email,
-                    c.course_name,
-                    c.description as course_description,
-                    ta.questions_answered as assessment_score,
-                    ta.questions_presented as total_questions,
-                    ta.confidence_score,
-                    (SELECT COUNT(DISTINCT o.trait_tag) 
-                     FROM student_answers sa 
-                     JOIN options o ON sa.chosen_option_id = o.option_id 
-                     WHERE sa.attempt_id = r.attempt_id AND o.trait_tag IS NOT NULL) as traits_found,
-                    ta.taken_at as assessment_date
-                FROM recommendations r
-                JOIN users u ON r.user_id = u.user_id
-                JOIN courses c ON r.course_id = c.course_id
-                LEFT JOIN test_attempts ta ON r.attempt_id = ta.attempt_id
-                ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
-            """
-            count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE attempt_id IS NOT NULL"
-            all_recommendations = execute_query(query)
-            count_result = execute_query_one(count_query)
-        else:
-            query = """
-                SELECT 
-                    r.*,
-                    r.recommendation_rank,
-                    CONCAT(u.first_name, ' ', u.last_name) as user_name,
-                    u.email as user_email,
-                    c.course_name,
-                    c.description as course_description,
-                    ta.questions_answered as assessment_score,
-                    ta.questions_presented as total_questions,
-                    ta.confidence_score,
-                    (SELECT COUNT(DISTINCT o.trait_tag) 
-                     FROM student_answers sa 
-                     JOIN options o ON sa.chosen_option_id = o.option_id 
-                     WHERE sa.attempt_id = r.attempt_id AND o.trait_tag IS NOT NULL) as traits_found,
-                    ta.taken_at as assessment_date
-                FROM recommendations r
-                JOIN users u ON r.user_id = u.user_id
-                JOIN courses c ON r.course_id = c.course_id
-                LEFT JOIN test_attempts ta ON r.attempt_id = ta.attempt_id
-                WHERE COALESCE(r.status, 'pending') = $1
-                ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
-            """
-            count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE COALESCE(status, 'pending') = $1 AND attempt_id IS NOT NULL"
-            all_recommendations = execute_query(query, [status.lower()])
-            count_result = execute_query_one(count_query, [status.lower()])
-        
         # Helper function to extract match percentage from reasoning field
         import re
         def extract_match_percentage(reasoning):
@@ -1021,12 +966,89 @@ async def get_recommendations_by_status(
                 return float(match.group(1))
             return 0.0
         
-        # Group recommendations by attempt_id - collect all first, then sort
+        # OPTIMIZED: Step 1 - Get paginated attempt_ids first (SQL-level pagination)
+        if status.lower() == 'all':
+            # Get distinct attempt_ids with pagination
+            attempt_ids_query = """
+                SELECT DISTINCT attempt_id 
+                FROM recommendations 
+                WHERE attempt_id IS NOT NULL
+                ORDER BY attempt_id DESC
+                LIMIT $1 OFFSET $2
+            """
+            count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE attempt_id IS NOT NULL"
+            attempt_ids_result = execute_query(attempt_ids_query, [limit, offset])
+            count_result = execute_query_one(count_query)
+        else:
+            # Get distinct attempt_ids filtered by status with pagination
+            attempt_ids_query = """
+                SELECT DISTINCT attempt_id 
+                FROM recommendations 
+                WHERE COALESCE(status, 'pending') = $1 AND attempt_id IS NOT NULL
+                ORDER BY attempt_id DESC
+                LIMIT $2 OFFSET $3
+            """
+            count_query = "SELECT COUNT(DISTINCT attempt_id) as total FROM recommendations WHERE COALESCE(status, 'pending') = $1 AND attempt_id IS NOT NULL"
+            attempt_ids_result = execute_query(attempt_ids_query, [status.lower(), limit, offset])
+            count_result = execute_query_one(count_query, [status.lower()])
+        
+        # Extract attempt_ids
+        attempt_ids = [row['attempt_id'] for row in (attempt_ids_result or []) if row.get('attempt_id')]
+        
+        if not attempt_ids:
+            return {
+                "recommendations": [],
+                "status_filter": status,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": 0,
+                    "pages": 1
+                }
+            }
+        
+        # Step 2 - Fetch only recommendations for the paginated attempt_ids
+        placeholders = ', '.join([f'${i+1}' for i in range(len(attempt_ids))])
+        recommendations_query = f"""
+            SELECT 
+                r.*,
+                r.recommendation_rank,
+                CONCAT(u.first_name, ' ', u.last_name) as user_name,
+                u.email as user_email,
+                c.course_name,
+                c.description as course_description,
+                ta.questions_answered as assessment_score,
+                ta.questions_presented as total_questions,
+                ta.confidence_score,
+                ta.taken_at as assessment_date
+            FROM recommendations r
+            JOIN users u ON r.user_id = u.user_id
+            JOIN courses c ON r.course_id = c.course_id
+            LEFT JOIN test_attempts ta ON r.attempt_id = ta.attempt_id
+            WHERE r.attempt_id IN ({placeholders})
+            ORDER BY r.attempt_id DESC, r.recommendation_rank ASC
+        """
+        all_recommendations = execute_query(recommendations_query, attempt_ids)
+        
+        # Step 3 - Get traits_found in a single batch query (much faster than per-row subquery)
+        traits_query = f"""
+            SELECT 
+                sa.attempt_id,
+                COUNT(DISTINCT o.trait_tag) as traits_found
+            FROM student_answers sa 
+            JOIN options o ON sa.chosen_option_id = o.option_id 
+            WHERE sa.attempt_id IN ({placeholders}) AND o.trait_tag IS NOT NULL
+            GROUP BY sa.attempt_id
+        """
+        traits_result = execute_query(traits_query, attempt_ids)
+        traits_by_attempt = {row['attempt_id']: row['traits_found'] for row in (traits_result or [])}
+        
+        # Group recommendations by attempt_id
         grouped_by_attempt = {}
         for rec in all_recommendations or []:
             attempt_id = rec.get('attempt_id')
             if attempt_id is None:
-                attempt_id = f"no_attempt_{rec.get('recommendation_id')}"
+                continue
             
             if attempt_id not in grouped_by_attempt:
                 grouped_by_attempt[attempt_id] = {
@@ -1037,9 +1059,9 @@ async def get_recommendations_by_status(
                     'assessment_score': rec.get('assessment_score'),
                     'total_questions': rec.get('total_questions'),
                     'confidence_score': rec.get('confidence_score'),
-                    'traits_found': rec.get('traits_found'),
+                    'traits_found': traits_by_attempt.get(attempt_id, 0),
                     'assessment_date': rec.get('assessment_date'),
-                    'all_recommendations': []  # Collect all recommendations first
+                    'all_recommendations': []
                 }
             
             rec_data = {
@@ -1057,17 +1079,14 @@ async def get_recommendations_by_status(
             
             grouped_by_attempt[attempt_id]['all_recommendations'].append(rec_data)
         
-        # Sort by match_percentage descending and assign top_recommendation and other_recommendations
+        # Sort by match_percentage and assign top/other recommendations
         for attempt_id in grouped_by_attempt:
             all_recs = grouped_by_attempt[attempt_id]['all_recommendations']
-            # Sort by match percentage descending (highest match first)
             all_recs.sort(key=lambda x: x.get('match_percentage', 0), reverse=True)
             
-            # Assign proper ranks based on sorted order
             for idx, rec in enumerate(all_recs):
                 rec['recommendation_rank'] = idx + 1
             
-            # First one is top recommendation, rest are other recommendations
             if all_recs:
                 grouped_by_attempt[attempt_id]['top_recommendation'] = all_recs[0]
                 grouped_by_attempt[attempt_id]['other_recommendations'] = all_recs[1:]
@@ -1075,16 +1094,14 @@ async def get_recommendations_by_status(
                 grouped_by_attempt[attempt_id]['top_recommendation'] = None
                 grouped_by_attempt[attempt_id]['other_recommendations'] = []
             
-            # Remove the temporary all_recommendations field
             del grouped_by_attempt[attempt_id]['all_recommendations']
         
-        # Convert to list and paginate
-        grouped_list = list(grouped_by_attempt.values())
-        total = len(grouped_list)
-        paginated = grouped_list[offset:offset + limit]
+        # Maintain order based on original attempt_ids order
+        result_list = [grouped_by_attempt[aid] for aid in attempt_ids if aid in grouped_by_attempt]
+        total = int(count_result['total']) if count_result else 0
         
         return {
-            "recommendations": paginated,
+            "recommendations": result_list,
             "status_filter": status,
             "pagination": {
                 "page": page,
