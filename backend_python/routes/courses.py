@@ -2,9 +2,43 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional
 import math
+import os
+import httpx
 from models.database import execute_query, execute_query_one
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
+
+# Production CoursePro backend URL for cache invalidation
+PRODUCTION_API_URL = os.getenv('PRODUCTION_API_URL', '')
+
+async def invalidate_production_cache():
+    """
+    Call CoursePro production backend to invalidate its cache.
+    This ensures that course changes made in Admin Panel are reflected immediately.
+    """
+    if not PRODUCTION_API_URL:
+        print("[Cache] No PRODUCTION_API_URL configured, skipping production cache invalidation")
+        return
+    
+    cache_key = os.getenv('CACHE_INVALIDATION_KEY', '')
+    if not cache_key:
+        print("[Cache] No CACHE_INVALIDATION_KEY configured, skipping cache invalidation")
+        return
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Call the public cache invalidation endpoint with API key
+            response = await client.post(
+                f"{PRODUCTION_API_URL}/cache/invalidate",
+                params={"api_key": cache_key}
+            )
+            if response.status_code == 200:
+                print(f"[Cache] Production cache invalidated successfully (courses changed)")
+            else:
+                print(f"[Cache] Production cache invalidation returned status {response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"[Cache] Failed to invalidate production cache: {e}")
+        # Don't raise - this is a best-effort operation
 
 # Pydantic models
 class CourseCreate(BaseModel):
@@ -98,6 +132,9 @@ async def create_course(course: CourseCreate):
             [course.course_name, course.description, course.required_strand, course.minimum_gwa, course.trait_tag]
         )
         
+        # Invalidate production cache so new course appears in recommendations
+        await invalidate_production_cache()
+        
         return {
             "message": "Course created successfully",
             "course_id": result['course_id']
@@ -120,6 +157,9 @@ async def update_course(course_id: int, course: CourseUpdate):
         if result == 0:
             raise HTTPException(status_code=404, detail="Course not found")
         
+        # Invalidate production cache so course changes appear in recommendations
+        await invalidate_production_cache()
+        
         return {"message": "Course updated successfully"}
     except HTTPException:
         raise
@@ -134,6 +174,9 @@ async def delete_course(course_id: int):
         
         if result == 0:
             raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Invalidate production cache so deleted course is removed from recommendations
+        await invalidate_production_cache()
         
         return {"message": "Course deleted successfully"}
     except HTTPException:
