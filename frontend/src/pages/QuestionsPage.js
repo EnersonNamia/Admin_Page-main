@@ -81,10 +81,10 @@ function QuestionsPage() {
   const [newCategoryParent, setNewCategoryParent] = useState('Career Discovery');
   const [showCategorySelector, setShowCategorySelector] = useState(false);
   const [options, setOptions] = useState([
-    { text: '', trait: '' },
-    { text: '', trait: '' },
-    { text: '', trait: '' },
-    { text: '', trait: '' }
+    { text: '', trait: [] },
+    { text: '', trait: [] },
+    { text: '', trait: [] },
+    { text: '', trait: [] }
   ]);
   // eslint-disable-next-line no-unused-vars
   const [availableTraits, setAvailableTraits] = useState([]);
@@ -235,9 +235,9 @@ function QuestionsPage() {
       }
 
       // Validate that all filled options have traits
-      const optionsWithoutTraits = filledOptions.filter(o => !o.trait || !o.trait.trim());
+      const optionsWithoutTraits = filledOptions.filter(o => !o.trait || o.trait.length === 0);
       if (optionsWithoutTraits.length > 0) {
-        setError('Please assign a trait to each option');
+        setError('Please assign at least one trait to each option');
         return;
       }
 
@@ -269,7 +269,7 @@ function QuestionsPage() {
         if (option.text.trim()) {
           await axios.post(`${API_BASE_URL}/tests/questions/${questionId}/options`, {
             option_text: option.text.trim(),
-            trait: option.trait || null
+            trait: Array.isArray(option.trait) ? option.trait.join(',') : (option.trait || null)
           });
           optionCount++;
         }
@@ -283,10 +283,10 @@ function QuestionsPage() {
       // Reset form on success
       setFormData({ test_id: '', question_text: '', category: '' });
       setOptions([
-        { text: '', trait: '' },
-        { text: '', trait: '' },
-        { text: '', trait: '' },
-        { text: '', trait: '' }
+        { text: '', trait: [] },
+        { text: '', trait: [] },
+        { text: '', trait: [] },
+        { text: '', trait: [] }
       ]);
       setShowModal(false);
       setError('');
@@ -356,7 +356,12 @@ function QuestionsPage() {
     // Fetch options for this question
     try {
       const response = await axios.get(`${API_BASE_URL}/tests/questions/${question.question_id}/options`);
-      setEditOptions(response.data.options || []);
+      // Convert trait_tag from comma-separated string to array for multi-trait support
+      const optionsWithTraitArrays = (response.data.options || []).map(opt => ({
+        ...opt,
+        trait_tag: opt.trait_tag ? opt.trait_tag.split(',').map(t => t.trim()).filter(Boolean) : []
+      }));
+      setEditOptions(optionsWithTraitArrays);
     } catch (err) {
       console.error('Failed to fetch options:', err);
       toast.error('Failed to load question options');
@@ -376,7 +381,7 @@ function QuestionsPage() {
 
   // Add new option in edit mode
   const addEditOption = () => {
-    setEditOptions([...editOptions, { option_id: `new_${Date.now()}`, option_text: '', trait_tag: '', isNew: true }]);
+    setEditOptions([...editOptions, { option_id: `new_${Date.now()}`, option_text: '', trait_tag: [], isNew: true }]);
   };
 
   // Remove option in edit mode
@@ -416,12 +421,13 @@ function QuestionsPage() {
       let optionsUpdated = 0;
       
       for (const option of editOptions) {
+        const traitValue = Array.isArray(option.trait_tag) ? option.trait_tag.join(',') : (option.trait_tag || '');
         if (option.isNew) {
           // Create new option
           console.log('Creating new option:', option);
           const response = await axios.post(`${API_BASE_URL}/tests/questions/${editData.question_id}/options`, {
             option_text: option.option_text,
-            trait: option.trait_tag
+            trait: traitValue || null
           });
           console.log('New option created:', response.data);
           newOptionsCreated++;
@@ -429,7 +435,7 @@ function QuestionsPage() {
           // Update existing option
           await axios.put(`${API_BASE_URL}/tests/options/${option.option_id}`, {
             option_text: option.option_text,
-            trait_tag: option.trait_tag
+            trait_tag: traitValue || null
           });
           optionsUpdated++;
         }
@@ -450,7 +456,7 @@ function QuestionsPage() {
   };
 
   const addOption = () => {
-    setOptions([...options, { text: '', trait: '' }]);
+    setOptions([...options, { text: '', trait: [] }]);
   };
 
   const removeOption = (index) => {
@@ -470,9 +476,12 @@ function QuestionsPage() {
 
   const selectTrait = (trait) => {
     if (selectedOptionIndex !== null) {
-      updateOption(selectedOptionIndex, 'trait', trait);
-      setShowTraitSelector(false);
-      setSelectedOptionIndex(null);
+      const currentTraits = options[selectedOptionIndex]?.trait || [];
+      const traitArray = Array.isArray(currentTraits) ? currentTraits : (currentTraits ? currentTraits.split(',').filter(Boolean) : []);
+      const updatedTraits = traitArray.includes(trait)
+        ? traitArray.filter(t => t !== trait)
+        : [...traitArray, trait];
+      updateOption(selectedOptionIndex, 'trait', updatedTraits);
     }
   };
 
@@ -936,14 +945,14 @@ function QuestionsPage() {
                               onBlur={(e) => e.target.style.borderColor = '#2A2A3E'}
                             />
                           </div>
-                          <div style={{display: 'flex', gap: '8px', paddingTop: '0px'}}>
+                          <div style={{display: 'flex', gap: '8px', paddingTop: '0px', flexWrap: 'wrap', alignItems: 'center'}}>
                             <button
                               type="button"
                               onClick={() => openTraitSelector(index)}
-                              style={{padding: '14px 16px', border: '1px solid #2A2A3E', borderRadius: '8px', background: option.trait ? '#C97A6F' : '#2A2A3E', color: '#FFF', cursor: 'pointer', fontSize: '12px', fontWeight: '500', transition: 'all 0.2s ease', whiteSpace: 'nowrap', minWidth: '120px', textAlign: 'center'}}
+                              style={{padding: '10px 14px', border: '1px solid #2A2A3E', borderRadius: '8px', background: (option.trait && option.trait.length > 0) ? '#C97A6F' : '#2A2A3E', color: '#FFF', cursor: 'pointer', fontSize: '12px', fontWeight: '500', transition: 'all 0.2s ease', whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'center'}}
                               onMouseEnter={(e) => {
                                 e.target.style.borderColor = '#C97A6F';
-                                if (!option.trait) {
+                                if (!option.trait || option.trait.length === 0) {
                                   e.target.style.background = '#3A3A4E';
                                 } else {
                                   e.target.style.background = '#B8634F';
@@ -951,16 +960,25 @@ function QuestionsPage() {
                               }}
                               onMouseLeave={(e) => {
                                 e.target.style.borderColor = '#2A2A3E';
-                                if (!option.trait) {
+                                if (!option.trait || option.trait.length === 0) {
                                   e.target.style.background = '#2A2A3E';
                                 } else {
                                   e.target.style.background = '#C97A6F';
                                 }
                               }}
                             >
-                              <i className="fas fa-tag" style={{marginRight: '6px'}}></i>
-                              {option.trait || 'Trait'}
+                              <i className="fas fa-tags" style={{marginRight: '6px'}}></i>
+                              {(option.trait && option.trait.length > 0) ? `${option.trait.length} Trait${option.trait.length > 1 ? 's' : ''}` : 'Traits'}
                             </button>
+                            {option.trait && option.trait.length > 0 && (
+                              <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '200px'}}>
+                                {option.trait.map((t, ti) => (
+                                  <span key={ti} style={{padding: '3px 8px', background: 'rgba(201, 122, 111, 0.3)', color: '#C97A6F', borderRadius: '12px', fontSize: '10px', fontWeight: '500', border: '1px solid rgba(201, 122, 111, 0.4)'}}>
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <button
                               type="button"
                               className="btn btn-sm btn-danger"
@@ -977,7 +995,7 @@ function QuestionsPage() {
                 </div>
               </div>
               <div className="modal-footer" style={{padding: '20px 30px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #E8D5C4'}}>
-                <button type="button" className="btn btn-secondary" onClick={() => {setShowModal(false); setError(''); setFormData({test_id: '', question_text: '', category: ''}); setOptions([{ text: '', trait: '' }, { text: '', trait: '' }, { text: '', trait: '' }, { text: '', trait: '' }]);}}>
+                <button type="button" className="btn btn-secondary" onClick={() => {setShowModal(false); setError(''); setFormData({test_id: '', question_text: '', category: ''}); setOptions([{ text: '', trait: [] }, { text: '', trait: [] }, { text: '', trait: [] }, { text: '', trait: [] }]);}}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={!formData.question_text.trim() || options.filter(o => o.text.trim()).length === 0} style={{opacity: !formData.question_text.trim() || options.filter(o => o.text.trim()).length === 0 ? 0.5 : 1, cursor: !formData.question_text.trim() || options.filter(o => o.text.trim()).length === 0 ? 'not-allowed' : 'pointer'}}>
@@ -1049,10 +1067,18 @@ function QuestionsPage() {
       )}
 
       {showTraitSelector && (
-        <div className="modal-overlay" onClick={() => setShowTraitSelector(false)}>
+        <div className="modal-overlay" onClick={() => { setShowTraitSelector(false); setSelectedOptionIndex(null); }}>
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{maxHeight: '90vh', overflowY: 'auto', maxWidth: '1000px', width: '90%'}}>
             <div className="modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-              <h2>Select Trait</h2>
+              <h2>
+                <i className="fas fa-tags" style={{marginRight: '8px'}}></i>
+                Select Trait Tags
+                {selectedOptionIndex !== null && options[selectedOptionIndex]?.trait?.length > 0 && (
+                  <span style={{fontSize: '14px', fontWeight: '400', marginLeft: '12px', color: '#90B58D'}}>
+                    ({options[selectedOptionIndex].trait.length} selected)
+                  </span>
+                )}
+              </h2>
               <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
                 <button 
                   type="button" 
@@ -1061,11 +1087,26 @@ function QuestionsPage() {
                 >
                   <i className="fas fa-plus" style={{marginRight: '6px'}}></i> Add Trait
                 </button>
-                <button className="close-btn" onClick={() => setShowTraitSelector(false)}>
+                <button className="close-btn" onClick={() => { setShowTraitSelector(false); setSelectedOptionIndex(null); }}>
                   <i className="fas fa-times"></i>
                 </button>
               </div>
             </div>
+            {/* Show selected traits summary */}
+            {selectedOptionIndex !== null && options[selectedOptionIndex]?.trait?.length > 0 && (
+              <div style={{padding: '12px 30px', background: 'rgba(144, 181, 141, 0.1)', borderBottom: '1px solid #E8D5C4', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center'}}>
+                <span style={{fontSize: '12px', fontWeight: '600', color: '#5A4A3A', marginRight: '8px'}}>Selected:</span>
+                {options[selectedOptionIndex].trait.map((t, i) => (
+                  <span key={i} style={{padding: '4px 10px', background: '#C97A6F', color: '#FFF', borderRadius: '12px', fontSize: '11px', fontWeight: '500', display: 'inline-flex', alignItems: 'center', gap: '4px'}}>
+                    {t}
+                    <span 
+                      onClick={() => selectTrait(t)} 
+                      style={{cursor: 'pointer', marginLeft: '2px', fontWeight: '700'}}
+                    >×</span>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="modal-body" style={{padding: '30px'}}>
               {showNewTraitInput && (
                 <div style={{marginBottom: '25px', padding: '20px', background: '#FAF5F0', borderRadius: '8px', border: '1px solid #E8D5C4'}}>
@@ -1103,46 +1144,57 @@ function QuestionsPage() {
                   </div>
                 </div>
               )}
-              {Object.entries(getMergedTraitCategories()).map(([category, traits]) => (
+              {Object.entries(getMergedTraitCategories()).map(([category, traits]) => {
+                const currentTraits = (selectedOptionIndex !== null && options[selectedOptionIndex]?.trait) || [];
+                return (
                 <div key={category} style={{marginBottom: '30px'}}>
                   <h3 style={{fontSize: '14px', fontWeight: '600', textTransform: 'uppercase', color: '#C97A6F', marginBottom: '15px', letterSpacing: '0.5px'}}>
                     {category}
                   </h3>
                   <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px'}}>
-                    {traits.map(trait => (
+                    {traits.map(trait => {
+                      const isSelected = Array.isArray(currentTraits) && currentTraits.includes(trait);
+                      return (
                       <button
                         key={trait}
                         type="button"
                         onClick={() => selectTrait(trait)}
                         style={{
                           padding: '12px 15px',
-                          border: '2px solid #E8D5C4',
+                          border: isSelected ? '2px solid #C97A6F' : '2px solid #E8D5C4',
                           borderRadius: '6px',
-                          background: options[selectedOptionIndex]?.trait === trait ? '#C97A6F' : '#FAF5F0',
-                          color: options[selectedOptionIndex]?.trait === trait ? '#FFF' : '#5A4A3A',
+                          background: isSelected ? '#C97A6F' : '#FAF5F0',
+                          color: isSelected ? '#FFF' : '#5A4A3A',
                           cursor: 'pointer',
                           fontSize: '13px',
                           fontWeight: '500',
                           transition: 'all 0.2s ease',
-                          textAlign: 'center'
+                          textAlign: 'center',
+                          position: 'relative'
                         }}
                         onMouseEnter={(e) => {
-                          e.target.style.background = options[selectedOptionIndex]?.trait === trait ? '#B8634F' : '#F5E6D3';
+                          e.target.style.background = isSelected ? '#B8634F' : '#F5E6D3';
                         }}
                         onMouseLeave={(e) => {
-                          e.target.style.background = options[selectedOptionIndex]?.trait === trait ? '#C97A6F' : '#FAF5F0';
+                          e.target.style.background = isSelected ? '#C97A6F' : '#FAF5F0';
                         }}
                       >
+                        {isSelected && <i className="fas fa-check" style={{marginRight: '6px', fontSize: '11px'}}></i>}
                         {trait}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowTraitSelector(false)}>
-                Close
+            <div className="modal-footer" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <span style={{fontSize: '13px', color: '#888'}}>
+                Click traits to select/deselect. You can choose multiple.
+              </span>
+              <button type="button" className="btn btn-primary" onClick={() => { setShowTraitSelector(false); setSelectedOptionIndex(null); }}>
+                <i className="fas fa-check" style={{marginRight: '6px'}}></i> Done
               </button>
             </div>
           </div>
@@ -1406,7 +1458,7 @@ function QuestionsPage() {
                     {editOptions.map((option, index) => (
                       <div key={option.option_id} style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 180px 40px',
+                        gridTemplateColumns: '1fr auto 40px',
                         gap: '12px',
                         padding: '15px',
                         background: option.isNew ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 255, 255, 0.05)',
@@ -1435,9 +1487,9 @@ function QuestionsPage() {
                         </div>
                         <div>
                           <label style={{ display: 'block', color: '#6b7280', marginBottom: '6px', fontSize: '12px' }}>
-                            Trait Tag
+                            Trait Tags
                           </label>
-                          <div style={{ position: 'relative' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <button
                               type="button"
                               onClick={() => {
@@ -1445,23 +1497,56 @@ function QuestionsPage() {
                                 setShowEditTraitSelector(true);
                               }}
                               style={{
-                                width: '100%',
                                 padding: '10px 12px',
                                 borderRadius: '6px',
                                 border: '1px solid rgba(255, 255, 255, 0.2)',
-                                background: option.trait_tag ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                                color: option.trait_tag ? '#a78bfa' : '#6b7280',
+                                background: (Array.isArray(option.trait_tag) ? option.trait_tag.length > 0 : !!option.trait_tag) ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                color: (Array.isArray(option.trait_tag) ? option.trait_tag.length > 0 : !!option.trait_tag) ? '#a78bfa' : '#6b7280',
                                 fontSize: '13px',
                                 cursor: 'pointer',
                                 textAlign: 'left',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'space-between'
+                                justifyContent: 'space-between',
+                                minWidth: '140px'
                               }}
                             >
-                              <span>{option.trait_tag || 'Select trait...'}</span>
+                              <span>
+                                <i className="fas fa-tags" style={{ marginRight: '6px' }}></i>
+                                {Array.isArray(option.trait_tag) && option.trait_tag.length > 0 
+                                  ? `${option.trait_tag.length} Trait${option.trait_tag.length > 1 ? 's' : ''}` 
+                                  : 'Select traits...'}
+                              </span>
                               <i className="fas fa-chevron-down" style={{ fontSize: '10px' }}></i>
                             </button>
+                            {Array.isArray(option.trait_tag) && option.trait_tag.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {option.trait_tag.map((t, ti) => (
+                                  <span key={ti} style={{
+                                    padding: '2px 8px',
+                                    background: 'rgba(139, 92, 246, 0.2)',
+                                    color: '#a78bfa',
+                                    borderRadius: '10px',
+                                    fontSize: '10px',
+                                    fontWeight: '500',
+                                    border: '1px solid rgba(139, 92, 246, 0.3)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}>
+                                    {t}
+                                    <span 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const updated = option.trait_tag.filter(tr => tr !== t);
+                                        updateEditOption(index, 'trait_tag', updated);
+                                      }}
+                                      style={{ cursor: 'pointer', fontWeight: '700', fontSize: '12px' }}
+                                    >×</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>
@@ -1570,7 +1655,12 @@ function QuestionsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ color: '#fff', margin: 0 }}>
                 <i className="fas fa-tags" style={{ marginRight: '10px', color: '#8b5cf6' }}></i>
-                Select Trait Tag
+                Select Trait Tags
+                {editSelectedOptionIndex !== null && Array.isArray(editOptions[editSelectedOptionIndex]?.trait_tag) && editOptions[editSelectedOptionIndex].trait_tag.length > 0 && (
+                  <span style={{ fontSize: '14px', fontWeight: '400', marginLeft: '12px', color: '#a78bfa' }}>
+                    ({editOptions[editSelectedOptionIndex].trait_tag.length} selected)
+                  </span>
+                )}
               </h3>
               <button
                 onClick={() => setShowEditTraitSelector(false)}
@@ -1580,26 +1670,63 @@ function QuestionsPage() {
               </button>
             </div>
             
+            {/* Selected traits summary */}
+            {editSelectedOptionIndex !== null && Array.isArray(editOptions[editSelectedOptionIndex]?.trait_tag) && editOptions[editSelectedOptionIndex].trait_tag.length > 0 && (
+              <div style={{ padding: '10px 15px', marginBottom: '15px', background: 'rgba(139, 92, 246, 0.1)', borderRadius: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: '#a78bfa', marginRight: '8px' }}>Selected:</span>
+                {editOptions[editSelectedOptionIndex].trait_tag.map((t, i) => (
+                  <span key={i} style={{
+                    padding: '3px 10px',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                    color: '#fff',
+                    borderRadius: '12px',
+                    fontSize: '11px',
+                    fontWeight: '500',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    {t}
+                    <span 
+                      onClick={() => {
+                        const updated = editOptions[editSelectedOptionIndex].trait_tag.filter(tr => tr !== t);
+                        updateEditOption(editSelectedOptionIndex, 'trait_tag', updated);
+                      }}
+                      style={{ cursor: 'pointer', marginLeft: '2px', fontWeight: '700' }}
+                    >×</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
-              {Object.entries(traitCategories).slice(0, 11).map(([category, traits]) => (
+              {Object.entries(traitCategories).slice(0, 11).map(([category, traits]) => {
+                const currentEditTraits = (editSelectedOptionIndex !== null && Array.isArray(editOptions[editSelectedOptionIndex]?.trait_tag)) 
+                  ? editOptions[editSelectedOptionIndex].trait_tag 
+                  : [];
+                return (
                 <div key={category} style={{ marginBottom: '15px' }}>
                   <div style={{ color: '#8b5cf6', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>
                     {category}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {traits.map(trait => (
+                    {traits.map(trait => {
+                      const isSelected = currentEditTraits.includes(trait);
+                      return (
                       <button
                         key={trait}
                         type="button"
                         onClick={() => {
-                          updateEditOption(editSelectedOptionIndex, 'trait_tag', trait);
-                          setShowEditTraitSelector(false);
+                          const updatedTraits = isSelected
+                            ? currentEditTraits.filter(t => t !== trait)
+                            : [...currentEditTraits, trait];
+                          updateEditOption(editSelectedOptionIndex, 'trait_tag', updatedTraits);
                         }}
                         style={{
                           padding: '6px 12px',
                           borderRadius: '15px',
                           border: 'none',
-                          background: editOptions[editSelectedOptionIndex]?.trait_tag === trait 
+                          background: isSelected 
                             ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' 
                             : 'rgba(255, 255, 255, 0.1)',
                           color: '#fff',
@@ -1608,12 +1735,37 @@ function QuestionsPage() {
                           transition: 'all 0.2s'
                         }}
                       >
+                        {isSelected && <i className="fas fa-check" style={{ marginRight: '4px', fontSize: '10px' }}></i>}
                         {trait}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+                );
+              })}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', paddingTop: '15px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                Click traits to select/deselect. You can choose multiple.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowEditTraitSelector(false)}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600'
+                }}
+              >
+                <i className="fas fa-check" style={{ marginRight: '6px' }}></i> Done
+              </button>
             </div>
           </div>
         </div>
