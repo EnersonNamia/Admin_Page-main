@@ -941,6 +941,34 @@ async def get_status_stats():
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(error)}")
 
+# Get questions and chosen options for a specific assessment attempt
+@router.get("/attempt/{attempt_id}/answers")
+async def get_attempt_answers(attempt_id: int):
+    """Get all questions and the options chosen by the user for a given assessment attempt."""
+    try:
+        answers = execute_query("""
+            SELECT 
+                q.question_id,
+                q.question_text,
+                q.question_order,
+                o.option_id as chosen_option_id,
+                o.option_text as chosen_option_text,
+                o.trait_tag
+            FROM student_answers sa
+            JOIN options o ON sa.chosen_option_id = o.option_id
+            JOIN questions q ON o.question_id = q.question_id
+            WHERE sa.attempt_id = $1
+            ORDER BY q.question_order ASC, q.question_id ASC
+        """, [attempt_id])
+
+        return {
+            "attempt_id": attempt_id,
+            "answers": answers or [],
+            "total_questions": len(answers or [])
+        }
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch attempt answers: {str(error)}")
+
 # Get recommendations by status with filtering - grouped by assessment
 @router.get("/filter/status/{status}")
 async def get_recommendations_by_status(
