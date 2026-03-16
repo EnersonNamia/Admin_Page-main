@@ -624,8 +624,9 @@ async def toggle_rule(rule_id: int):
 @router.get("/rules/options/traits")
 async def get_available_traits():
     try:
-        traits = execute_query("SELECT DISTINCT trait_tag FROM options WHERE trait_tag IS NOT NULL ORDER BY trait_tag")
-        return {"traits": [t['trait_tag'] for t in traits if t.get('trait_tag')]}
+        # Supports comma-separated multi-trait values per option
+        traits = execute_query("SELECT DISTINCT unnest(string_to_array(trait_tag, ',')) as trait_tag FROM options WHERE trait_tag IS NOT NULL AND trait_tag != '' ORDER BY 1")
+        return {"traits": [t['trait_tag'].strip() for t in traits if t.get('trait_tag') and t['trait_tag'].strip()]}
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch traits: {str(error)}")
 
@@ -1059,13 +1060,15 @@ async def get_recommendations_by_status(
         all_recommendations = execute_query(recommendations_query, attempt_ids)
         
         # Step 3 - Get traits_found in a single batch query (much faster than per-row subquery)
+        # Supports comma-separated multi-trait values per option
         traits_query = f"""
             SELECT 
                 sa.attempt_id,
-                COUNT(DISTINCT o.trait_tag) as traits_found
+                COUNT(DISTINCT trait) as traits_found
             FROM student_answers sa 
-            JOIN options o ON sa.chosen_option_id = o.option_id 
-            WHERE sa.attempt_id IN ({placeholders}) AND o.trait_tag IS NOT NULL
+            JOIN options o ON sa.chosen_option_id = o.option_id,
+            LATERAL unnest(string_to_array(o.trait_tag, ',')) AS trait
+            WHERE sa.attempt_id IN ({placeholders}) AND o.trait_tag IS NOT NULL AND o.trait_tag != ''
             GROUP BY sa.attempt_id
         """
         traits_result = execute_query(traits_query, attempt_ids)

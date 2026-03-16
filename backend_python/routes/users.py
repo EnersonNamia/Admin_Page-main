@@ -349,14 +349,15 @@ async def get_user_test_history(user_id: int):
         enriched_history = []
         for attempt in (test_history or []):
             # Get traits from student_answers joined with options (the actual traits user selected)
+            # Supports comma-separated multi-trait values per option
             traits_result = execute_query("""
-                SELECT DISTINCT o.trait_tag
+                SELECT DISTINCT unnest(string_to_array(o.trait_tag, ',')) as trait_tag
                 FROM student_answers sa
                 JOIN options o ON sa.chosen_option_id = o.option_id
-                WHERE sa.attempt_id = $1 AND o.trait_tag IS NOT NULL
+                WHERE sa.attempt_id = $1 AND o.trait_tag IS NOT NULL AND o.trait_tag != ''
             """, [attempt['attempt_id']])
             
-            traits_found = [r['trait_tag'] for r in (traits_result or []) if r.get('trait_tag')]
+            traits_found = [r['trait_tag'].strip() for r in (traits_result or []) if r.get('trait_tag') and r['trait_tag'].strip()]
             
             # Get recommendations for this attempt
             recommendations = execute_query("""

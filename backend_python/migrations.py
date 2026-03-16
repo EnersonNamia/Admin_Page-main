@@ -327,6 +327,23 @@ def run_migrations():
             print(f"   ⚠️  Could not update foreign key constraint: {fk_error}")
             # This is non-fatal, continue with other migrations
 
+        # Migration 16: Widen trait_tag column in options table for multi-trait support
+        print("🔄 Checking trait_tag column size in options table...")
+        try:
+            cursor.execute("""
+                SELECT character_maximum_length 
+                FROM information_schema.columns 
+                WHERE table_name='options' AND column_name='trait_tag'
+            """)
+            result = cursor.fetchone()
+            if result and result[0] and result[0] < 500:
+                cursor.execute("ALTER TABLE options ALTER COLUMN trait_tag TYPE VARCHAR(500)")
+                print("   ✅ options.trait_tag column widened to VARCHAR(500) for multi-trait support")
+            else:
+                print("   ✅ options.trait_tag column already supports multiple traits")
+        except Exception as col_error:
+            print(f"   ⚠️  Could not widen trait_tag column: {col_error}")
+
         conn.commit()
         print("\n✅ All migrations completed successfully!")
         

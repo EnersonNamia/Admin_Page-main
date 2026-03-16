@@ -146,8 +146,9 @@ async def create_test(test: TestCreate):
 @router.get("/traits")
 async def get_traits():
     try:
-        traits = execute_query("SELECT DISTINCT trait_tag FROM options WHERE trait_tag IS NOT NULL ORDER BY trait_tag")
-        trait_list = [trait['trait_tag'] for trait in traits if trait.get('trait_tag')]
+        # Supports comma-separated multi-trait values per option
+        traits = execute_query("SELECT DISTINCT unnest(string_to_array(trait_tag, ',')) as trait_tag FROM options WHERE trait_tag IS NOT NULL AND trait_tag != '' ORDER BY 1")
+        trait_list = [trait['trait_tag'].strip() for trait in traits if trait.get('trait_tag') and trait['trait_tag'].strip()]
         return {"traits": trait_list}
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Failed to fetch traits: {str(error)}")
