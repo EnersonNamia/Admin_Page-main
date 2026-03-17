@@ -80,6 +80,7 @@ function QuestionsPage() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryParent, setNewCategoryParent] = useState('Career Discovery');
   const [showCategorySelector, setShowCategorySelector] = useState(false);
+  const [showEditCategorySelector, setShowEditCategorySelector] = useState(false);
   const [options, setOptions] = useState([
     { text: '', trait: [] },
     { text: '', trait: [] },
@@ -221,9 +222,9 @@ function QuestionsPage() {
     try {
       setError('');
       
-      // Validate that category is selected
+      // Validate that at least one category is selected
       if (!formData.category || !formData.category.trim()) {
-        setError('Please select a question category');
+        setError('Please select at least one question category');
         return;
       }
 
@@ -844,15 +845,16 @@ function QuestionsPage() {
                   />
                 </div>
                 <div className="form-group" style={{marginBottom: '30px'}}>
-                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px', display: 'block'}}>Question Category</label>
+                  <label style={{fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: '#5A4A3A', letterSpacing: '0.5px', marginBottom: '12px', display: 'block'}}>Question Category <span style={{fontWeight: 'normal', fontSize: '11px', color: '#8B7A6A'}}>(select one or more)</span></label>
                   <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                    <button
-                      type="button"
+                    <div
                       onClick={() => setShowCategorySelector(true)}
-                      style={{flex: 1, padding: '12px', border: '1px solid #E8D5C4', borderRadius: '6px', background: '#FAF5F0', color: '#5A4A3A', fontFamily: 'inherit', fontSize: '14px', textAlign: 'left', cursor: 'pointer'}}
+                      style={{flex: 1, padding: '10px 12px', border: formData.category && formData.category.trim() ? '1px solid #90B58D' : '1px solid #E8D5C4', borderRadius: '6px', background: '#FAF5F0', minHeight: '40px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', cursor: 'pointer'}}
                     >
-                      {formData.category || 'Select a category...'}
-                    </button>
+                      {formData.category ? formData.category.split(',').map((c, i) => (
+                        <span key={i} style={{background: '#C97A6F', color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '500'}}>{c.trim()}</span>
+                      )) : <span style={{color: '#8B7A6A', fontSize: '14px'}}>Select categories...</span>}
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowNewCategoryInput(!showNewCategoryInput)}
@@ -1011,55 +1013,82 @@ function QuestionsPage() {
         <div className="modal-overlay" onClick={() => setShowCategorySelector(false)}>
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{maxHeight: '90vh', overflowY: 'auto', maxWidth: '1000px', width: '90%'}}>
             <div className="modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-              <h2>Select Category</h2>
+              <h2>Select Categories</h2>
               <button className="close-btn" onClick={() => setShowCategorySelector(false)}>
                 <i className="fas fa-times"></i>
               </button>
             </div>
             <div className="modal-body" style={{padding: '30px'}}>
+              {/* Selected categories display */}
+              <div style={{marginBottom: '20px', padding: '15px', background: '#FAF5F0', borderRadius: '8px', border: (formData.category && formData.category.trim()) ? '1px solid #90B58D' : '1px solid #E8D5C4'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+                  <div style={{fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', color: '#8B7A6A'}}>Selected Categories</div>
+                  <div style={{fontSize: '13px', fontWeight: '600', color: (formData.category && formData.category.trim()) ? '#90B58D' : '#C97A6F'}}>
+                    {(formData.category && formData.category.trim()) && <i className="fas fa-check-circle" style={{marginRight: '4px'}}></i>}
+                    {formData.category ? formData.category.split(',').filter(c => c.trim()).length : 0} selected
+                  </div>
+                </div>
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '32px'}}>
+                  {formData.category && formData.category.trim() ? formData.category.split(',').filter(c => c.trim()).map((cat, i) => (
+                    <span key={i} onClick={() => {
+                      const cats = formData.category.split(',').map(c => c.trim()).filter(Boolean);
+                      const updated = cats.filter(c => c !== cat.trim());
+                      setFormData({ ...formData, category: updated.join(', ') });
+                    }} style={{background: '#C97A6F', color: '#fff', padding: '6px 12px', borderRadius: '16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'}}>
+                      {cat.trim()}
+                      <i className="fas fa-times" style={{fontSize: '10px'}}></i>
+                    </span>
+                  )) : <span style={{color: '#8B7A6A', fontSize: '14px'}}>Select categories from the options below</span>}
+                </div>
+              </div>
               {Object.entries(getMergedCategories()).map(([group, categories]) => (
                 <div key={group} style={{marginBottom: '30px'}}>
                   <h3 style={{fontSize: '14px', fontWeight: '600', textTransform: 'uppercase', color: '#C97A6F', marginBottom: '15px', letterSpacing: '0.5px'}}>
                     {group}
                   </h3>
                   <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px'}}>
-                    {categories.map(category => (
-                      <button
-                        key={category}
-                        type="button"
-                        onClick={() => {
-                          setFormData({ ...formData, category });
-                          setShowCategorySelector(false);
-                        }}
-                        style={{
-                          padding: '12px 15px',
-                          border: '2px solid #E8D5C4',
-                          borderRadius: '6px',
-                          background: formData.category === category ? '#C97A6F' : '#FAF5F0',
-                          color: formData.category === category ? '#FFF' : '#5A4A3A',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          transition: 'all 0.2s ease',
-                          textAlign: 'center'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.target.style.background = formData.category === category ? '#B8634F' : '#F5E6D3';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.background = formData.category === category ? '#C97A6F' : '#FAF5F0';
-                        }}
-                      >
-                        {category}
-                      </button>
-                    ))}
+                    {categories.map(category => {
+                      const selectedCats = formData.category ? formData.category.split(',').map(c => c.trim()).filter(Boolean) : [];
+                      const isSelected = selectedCats.includes(category);
+                      return (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => {
+                            const cats = formData.category ? formData.category.split(',').map(c => c.trim()).filter(Boolean) : [];
+                            const updated = isSelected ? cats.filter(c => c !== category) : [...cats, category];
+                            setFormData({ ...formData, category: updated.join(', ') });
+                          }}
+                          style={{
+                            padding: '12px 15px',
+                            border: isSelected ? '2px solid #C97A6F' : '2px solid #E8D5C4',
+                            borderRadius: '6px',
+                            background: isSelected ? '#C97A6F' : '#FAF5F0',
+                            color: isSelected ? '#FFF' : '#5A4A3A',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            transition: 'all 0.2s ease',
+                            textAlign: 'center'
+                          }}
+                        >
+                          {isSelected && <i className="fas fa-check" style={{marginRight: '6px'}}></i>}
+                          {category}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
             </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowCategorySelector(false)}>
-                Close
+            <div className="modal-footer" style={{justifyContent: 'space-between', alignItems: 'center'}}>
+              <div style={{fontSize: '13px', color: (formData.category && formData.category.trim()) ? '#90B58D' : '#8B7A6A'}}>
+                {(formData.category && formData.category.trim())
+                  ? <><i className="fas fa-check-circle" style={{marginRight: '6px'}}></i>Ready ({formData.category.split(',').filter(c => c.trim()).length} selected)</>
+                  : 'Select at least 1 category'}
+              </div>
+              <button type="button" className="btn btn-primary" onClick={() => setShowCategorySelector(false)}>
+                Done
               </button>
             </div>
           </div>
@@ -1391,31 +1420,28 @@ function QuestionsPage() {
               {/* Question Category */}
               <div style={{ marginBottom: '25px' }}>
                 <label style={{ display: 'block', color: '#a0a0a0', marginBottom: '8px', fontSize: '14px' }}>
-                  Question Category
+                  Question Category <span style={{fontWeight: 'normal', fontSize: '12px', color: '#666'}}>(select one or more)</span>
                 </label>
-                <select
-                  value={editData.category || ''}
-                  onChange={(e) => setEditData({ ...editData, category: e.target.value })}
+                <div
+                  onClick={() => setShowEditCategorySelector(true)}
                   style={{
                     width: '100%',
-                    padding: '12px',
+                    padding: '10px 12px',
                     borderRadius: '8px',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    border: editData.category && editData.category.trim() ? '1px solid #4CAF50' : '1px solid rgba(255, 255, 255, 0.2)',
                     background: 'rgba(255, 255, 255, 0.05)',
-                    color: '#fff',
-                    fontSize: '14px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px',
+                    alignItems: 'center',
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="" style={{ background: '#1a1a2e' }}>Select category...</option>
-                  {Object.entries({...questionCategoryGroups, ...dynamicCategories}).map(([group, categories]) => (
-                    <optgroup key={group} label={group} style={{ background: '#1a1a2e' }}>
-                      {categories.map(cat => (
-                        <option key={cat} value={cat} style={{ background: '#1a1a2e' }}>{cat}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                  {editData.category && editData.category.trim() ? editData.category.split(',').filter(c => c.trim()).map((cat, i) => (
+                    <span key={i} style={{background: '#C97A6F', color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '500'}}>{cat.trim()}</span>
+                  )) : <span style={{color: '#666', fontSize: '14px'}}>Click to select categories...</span>}
+                </div>
               </div>
 
               {/* Options Section */}
@@ -1765,6 +1791,93 @@ function QuestionsPage() {
                 }}
               >
                 <i className="fas fa-check" style={{ marginRight: '6px' }}></i> Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Selector Modal */}
+      {showEditCategorySelector && editData && (
+        <div className="modal-overlay" onClick={() => setShowEditCategorySelector(false)}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} style={{maxHeight: '90vh', overflowY: 'auto', maxWidth: '1000px', width: '90%'}}>
+            <div className="modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <h2>Select Categories</h2>
+              <button className="close-btn" onClick={() => setShowEditCategorySelector(false)}>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="modal-body" style={{padding: '30px'}}>
+              {/* Selected categories display */}
+              <div style={{marginBottom: '20px', padding: '15px', background: '#1e293b', borderRadius: '8px', border: (editData.category && editData.category.trim()) ? '1px solid #4CAF50' : '1px solid #334155'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+                  <div style={{fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', color: '#94a3b8'}}>Selected Categories</div>
+                  <div style={{fontSize: '13px', fontWeight: '600', color: (editData.category && editData.category.trim()) ? '#4CAF50' : '#f59e0b'}}>
+                    {(editData.category && editData.category.trim()) && <i className="fas fa-check-circle" style={{marginRight: '4px'}}></i>}
+                    {editData.category ? editData.category.split(',').filter(c => c.trim()).length : 0} selected
+                  </div>
+                </div>
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '32px'}}>
+                  {editData.category && editData.category.trim() ? editData.category.split(',').filter(c => c.trim()).map((cat, i) => (
+                    <span key={i} onClick={() => {
+                      const cats = editData.category.split(',').map(c => c.trim()).filter(Boolean);
+                      const updated = cats.filter(c => c !== cat.trim());
+                      setEditData({ ...editData, category: updated.join(', ') });
+                    }} style={{background: '#C97A6F', color: '#fff', padding: '6px 12px', borderRadius: '16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'}}>
+                      {cat.trim()}
+                      <i className="fas fa-times" style={{fontSize: '10px'}}></i>
+                    </span>
+                  )) : <span style={{color: '#6b7280', fontSize: '14px'}}>Select categories from the options below</span>}
+                </div>
+              </div>
+              {Object.entries(getMergedCategories()).map(([group, categories]) => (
+                <div key={group} style={{marginBottom: '30px'}}>
+                  <h3 style={{fontSize: '14px', fontWeight: '600', textTransform: 'uppercase', color: '#C97A6F', marginBottom: '15px', letterSpacing: '0.5px'}}>
+                    {group}
+                  </h3>
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px'}}>
+                    {categories.map(category => {
+                      const selectedCats = editData.category ? editData.category.split(',').map(c => c.trim()).filter(Boolean) : [];
+                      const isSelected = selectedCats.includes(category);
+                      return (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => {
+                            const cats = editData.category ? editData.category.split(',').map(c => c.trim()).filter(Boolean) : [];
+                            const updated = isSelected ? cats.filter(c => c !== category) : [...cats, category];
+                            setEditData({ ...editData, category: updated.join(', ') });
+                          }}
+                          style={{
+                            padding: '12px 15px',
+                            border: isSelected ? '2px solid #C97A6F' : '2px solid #374151',
+                            borderRadius: '6px',
+                            background: isSelected ? '#C97A6F' : '#1e293b',
+                            color: isSelected ? '#FFF' : '#e2e8f0',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: '500',
+                            transition: 'all 0.2s ease',
+                            textAlign: 'center'
+                          }}
+                        >
+                          {isSelected && <i className="fas fa-check" style={{marginRight: '6px'}}></i>}
+                          {category}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer" style={{justifyContent: 'space-between', alignItems: 'center'}}>
+              <div style={{fontSize: '13px', color: (editData.category && editData.category.trim()) ? '#4CAF50' : '#94a3b8'}}>
+                {(editData.category && editData.category.trim())
+                  ? <><i className="fas fa-check-circle" style={{marginRight: '6px'}}></i>Ready ({editData.category.split(',').filter(c => c.trim()).length} selected)</>
+                  : 'Select at least 1 category'}
+              </div>
+              <button type="button" className="btn btn-primary" onClick={() => setShowEditCategorySelector(false)}>
+                Done
               </button>
             </div>
           </div>

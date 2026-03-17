@@ -116,10 +116,10 @@ function CoursesPage() {
 
   const handleAddCourse = async (e) => {
     e.preventDefault();
-    // Validate exactly 3 traits
+    // Validate at least 1 trait
     const traits = (formData.trait_tag || '').split(',').map(t => t.trim()).filter(Boolean);
-    if (traits.length !== 3) {
-      toast.error('Please select exactly 3 trait tags');
+    if (traits.length < 1) {
+      toast.error('Please select at least 1 trait tag');
       return;
     }
     try {
@@ -179,10 +179,10 @@ function CoursesPage() {
   // Submit edit form
   const handleEditCourse = async (e) => {
     e.preventDefault();
-    // Validate exactly 3 traits
+    // Validate at least 1 trait
     const traits = (editData.trait_tag || '').split(',').map(t => t.trim()).filter(Boolean);
-    if (traits.length !== 3) {
-      toast.error('Please select exactly 3 trait tags');
+    if (traits.length < 1) {
+      toast.error('Please select at least 1 trait tag');
       return;
     }
     try {
@@ -234,19 +234,14 @@ function CoursesPage() {
       if (prev.includes(trait)) {
         return prev.filter(t => t !== trait);
       } else {
-        // Limit to exactly 3 traits
-        if (prev.length >= 3) {
-          toast.error('Maximum 3 traits allowed. Remove one first.');
-          return prev;
-        }
         return [...prev, trait];
       }
     });
   };
 
   const applySelectedTraits = () => {
-    if (selectedTraits.length !== 3) {
-      toast.error('Please select exactly 3 traits');
+    if (selectedTraits.length === 0) {
+      toast.error('Please select at least 1 trait');
       return;
     }
     const traitString = selectedTraits.join(', ');
@@ -508,13 +503,13 @@ function CoursesPage() {
                   <input type="number" step="0.01" min="75" max="100" value={formData.minimum_gwa} onChange={(e) => setFormData({ ...formData, minimum_gwa: e.target.value })} placeholder="e.g., 85.00" />
                 </div>
                 <div className="form-group">
-                  <label>Trait Tags * <span style={{fontWeight: 'normal', fontSize: '12px', color: '#94a3b8'}}>(exactly 3 required)</span></label>
+                  <label>Trait Tags * <span style={{fontWeight: 'normal', fontSize: '12px', color: '#94a3b8'}}>(at least 1 required)</span></label>
                   <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
                     <div 
                       style={{
                         flex: 1, 
                         padding: '10px 12px', 
-                        border: formData.trait_tag && formData.trait_tag.split(',').filter(t => t.trim()).length === 3 ? '1px solid #10b981' : '1px solid #374151', 
+                        border: formData.trait_tag && formData.trait_tag.split(',').filter(t => t.trim()).length > 0 ? '1px solid #10b981' : '1px solid #374151', 
                         borderRadius: '6px', 
                         background: '#1f2937',
                         minHeight: '40px',
@@ -533,7 +528,7 @@ function CoursesPage() {
                           fontSize: '12px',
                           fontWeight: '500'
                         }}>{t.trim()}</span>
-                      )) : <span style={{color: '#f59e0b', fontSize: '14px'}}>Select 3 traits</span>}
+                      )) : <span style={{color: '#f59e0b', fontSize: '14px'}}>Select traits</span>}
                     </div>
                     <button 
                       type="button" 
@@ -618,13 +613,13 @@ function CoursesPage() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Trait Tags * <span style={{fontWeight: 'normal', fontSize: '12px', color: '#94a3b8'}}>(exactly 3 required)</span></label>
+                  <label>Trait Tags * <span style={{fontWeight: 'normal', fontSize: '12px', color: '#94a3b8'}}>(at least 1 required)</span></label>
                   <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
                     <div 
                       style={{
                         flex: 1, 
                         padding: '10px 12px', 
-                        border: editData.trait_tag && editData.trait_tag.split(',').filter(t => t.trim()).length === 3 ? '1px solid #10b981' : '1px solid #374151', 
+                        border: editData.trait_tag && editData.trait_tag.split(',').filter(t => t.trim()).length > 0 ? '1px solid #10b981' : '1px solid #374151', 
                         borderRadius: '6px', 
                         background: '#1f2937',
                         minHeight: '40px',
@@ -643,7 +638,7 @@ function CoursesPage() {
                           fontSize: '12px',
                           fontWeight: '500'
                         }}>{t.trim()}</span>
-                      )) : <span style={{color: '#f59e0b', fontSize: '14px'}}>Select 3 traits</span>}
+                      )) : <span style={{color: '#f59e0b', fontSize: '14px'}}>Select traits</span>}
                     </div>
                     <button 
                       type="button" 
@@ -737,7 +732,7 @@ function CoursesPage() {
             </div>
             <div className="modal-body" style={{padding: '20px'}}>
               {/* Selected traits display */}
-              <div style={{marginBottom: '20px', padding: '15px', background: '#1e293b', borderRadius: '8px', border: selectedTraits.length === 3 ? '1px solid #10b981' : '1px solid #334155'}}>
+              <div style={{marginBottom: '20px', padding: '15px', background: '#1e293b', borderRadius: '8px', border: selectedTraits.length > 0 ? '1px solid #10b981' : '1px solid #334155'}}>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
                   <div style={{fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', color: '#94a3b8'}}>
                     Selected Traits
@@ -745,13 +740,13 @@ function CoursesPage() {
                   <div style={{
                     fontSize: '13px', 
                     fontWeight: '600', 
-                    color: selectedTraits.length === 3 ? '#10b981' : selectedTraits.length > 3 ? '#ef4444' : '#f59e0b',
+                    color: selectedTraits.length > 0 ? '#10b981' : '#f59e0b',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
                   }}>
-                    {selectedTraits.length === 3 && <i className="fas fa-check-circle"></i>}
-                    {selectedTraits.length}/3 required
+                    {selectedTraits.length > 0 && <i className="fas fa-check-circle"></i>}
+                    {selectedTraits.length} selected
                   </div>
                 </div>
                 <div style={{display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '32px'}}>
@@ -775,7 +770,7 @@ function CoursesPage() {
                       {trait}
                       <i className="fas fa-times" style={{fontSize: '10px'}}></i>
                     </span>
-                  )) : <span style={{color: '#6b7280', fontSize: '14px'}}>Select exactly 3 traits from the options below</span>}
+                  )) : <span style={{color: '#6b7280', fontSize: '14px'}}>Select traits from the options below</span>}
                 </div>
               </div>
 
@@ -851,10 +846,10 @@ function CoursesPage() {
               ))}
             </div>
             <div className="modal-footer" style={{justifyContent: 'space-between', alignItems: 'center'}}>
-              <div style={{fontSize: '13px', color: selectedTraits.length === 3 ? '#10b981' : '#94a3b8'}}>
-                {selectedTraits.length === 3 
-                  ? <><i className="fas fa-check-circle" style={{marginRight: '6px'}}></i>Ready to apply</>
-                  : `Select ${3 - selectedTraits.length} more trait${3 - selectedTraits.length !== 1 ? 's' : ''}`
+              <div style={{fontSize: '13px', color: selectedTraits.length > 0 ? '#10b981' : '#94a3b8'}}>
+                {selectedTraits.length > 0 
+                  ? <><i className="fas fa-check-circle" style={{marginRight: '6px'}}></i>Ready to apply ({selectedTraits.length} selected)</>
+                  : 'Select at least 1 trait'
                 }
               </div>
               <div style={{display: 'flex', gap: '10px'}}>
@@ -865,14 +860,14 @@ function CoursesPage() {
                   type="button" 
                   className="btn btn-primary" 
                   onClick={applySelectedTraits}
-                  disabled={selectedTraits.length !== 3}
+                  disabled={selectedTraits.length === 0}
                   style={{
-                    background: selectedTraits.length === 3 ? '#8b5cf6' : '#4b5563',
-                    cursor: selectedTraits.length === 3 ? 'pointer' : 'not-allowed',
-                    opacity: selectedTraits.length === 3 ? 1 : 0.6
+                    background: selectedTraits.length > 0 ? '#8b5cf6' : '#4b5563',
+                    cursor: selectedTraits.length > 0 ? 'pointer' : 'not-allowed',
+                    opacity: selectedTraits.length > 0 ? 1 : 0.6
                   }}
                 >
-                  <i className="fas fa-check" style={{marginRight: '6px'}}></i> Apply 3 Traits
+                  <i className="fas fa-check" style={{marginRight: '6px'}}></i> Apply Traits
                 </button>
               </div>
             </div>
